@@ -232,19 +232,29 @@ export default function App() {
   // ===== На экране результата — подгружаем 50 слов на букву =====
   useEffect(() => {
     if (screen !== 'result' || !resultAttempt) return;
+    const letter = resultAttempt.letter;
+    const partOfSpeech = resultAttempt.partOfSpeech;
+    console.log('[vocab effect] start', { letter, partOfSpeech });
     let cancelled = false;
     setVocabWords(null);
     setVocabStatus('loading');
     void (async () => {
-      const list = await fetchVocabularyForLetter(resultAttempt.letter, resultAttempt.partOfSpeech, 50);
-      if (cancelled) return;
-      if (list === null) { setVocabStatus('error'); return; }
-      if (list.length === 0) { setVocabStatus('empty'); return; }
-      setVocabWords(list);
-      setVocabStatus('ok');
+      try {
+        const list = await fetchVocabularyForLetter(letter, partOfSpeech, 50);
+        if (cancelled) return;
+        console.log('[vocab effect] result', list ? `${list.length} words` : 'null');
+        if (list === null) { setVocabStatus('error'); return; }
+        if (list.length === 0) { setVocabStatus('empty'); return; }
+        setVocabWords(list);
+        setVocabStatus('ok');
+      } catch (e) {
+        console.error('[vocab effect] crash', e);
+        if (!cancelled) setVocabStatus('error');
+      }
     })();
     return () => { cancelled = true; };
-  }, [screen, resultAttempt]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, resultAttempt?.letter, resultAttempt?.partOfSpeech]);
 
   // ===== На экране подсчёта используем уже накопленный liveDict =====
   useEffect(() => {
@@ -771,7 +781,12 @@ function ResultScreen({ attempt, vocabWords, vocabStatus, onHome, onAgain }: {
       </div>
 
       <div className="vocab-block">
-        <div className="vocab-title">Расширь словарь — ещё 50 слов на букву {attempt.letter}</div>
+        <div className="vocab-title">
+          Расширь словарь — ещё 50 слов на букву {attempt.letter}
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)', fontWeight: 400 }}>
+            [{vocabStatus}{vocabStatus === 'ok' && vocabWords ? ` · ${vocabWords.length}` : ''}]
+          </span>
+        </div>
         <div className="vocab-sub">Слова из Викисловаря, которые могут пригодиться. Подобрано в выбранной части речи: {POS_LABEL_LOWER[attempt.partOfSpeech]}.</div>
         {vocabStatus === 'loading' && (
           <div className="dict-status"><span className="spin"></span><span>Подбираю 50 слов из Викисловаря…</span></div>
