@@ -282,7 +282,35 @@
   }
   .draw-context strong { color: var(--text); }
 
-  /* === Rejected words === */
+  /* === Dict status / Rejected words === */
+  .dict-status {
+    margin: 4px 0 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dict-status .spin {
+    width: 12px; height: 12px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .dict-status .spin { animation: none; } }
+
+  .invalid-block { margin-top: 10px; }
+  .word-item.invalid {
+    border-color: rgba(239, 68, 68, 0.35);
+    border-style: dashed;
+    opacity: 0.65;
+  }
+  .word-item.invalid .word { color: var(--text-dim); text-decoration: line-through; }
+  .word-item.invalid.checked { opacity: 1; border-color: var(--green); }
+  .word-item.invalid.checked .word { color: var(--text); text-decoration: none; }
+
   .rejected-block {
     margin-top: 10px;
   }
@@ -759,11 +787,17 @@
     <div id="wordsBlock" style="display:none">
       <div class="word-list-title">Услышано · нажмите, чтобы снять</div>
       <div class="word-list-sub" id="wordListSub"></div>
+      <div class="dict-status" id="dictStatus" style="display:none"></div>
       <div class="word-list" id="wordList"></div>
       <div class="rejected-block" id="rejectedBlock" style="display:none">
         <div class="word-list-title">Не подошло по части речи</div>
         <div class="word-list-sub">Авто-фильтр по окончаниям может ошибаться. Если слово на самом деле подходит — верните его тапом.</div>
         <div class="word-list" id="rejectedList"></div>
+      </div>
+      <div class="invalid-block" id="invalidBlock" style="display:none">
+        <div class="word-list-title">Не найдено в словаре</div>
+        <div class="word-list-sub">Проверка по Викисловарю. Если уверены, что слово существует — верните его тапом.</div>
+        <div class="word-list" id="invalidList"></div>
       </div>
     </div>
 
@@ -899,6 +933,57 @@ function extractMatchingWords(transcript, letter) {
     out.push(w);
   }
   return out;
+}
+
+// Кеш словарных проверок на сессию: word -> boolean
+const dictCache = new Map();
+
+// Проверка слов в Викисловаре. Возвращает Set валидных, либо null если запрос упал.
+async function checkInDictionary(words) {
+  const uniq = Array.from(new Set(words.map(w => String(w).toLowerCase().replace(/ё/g, 'е')).filter(Boolean)));
+  if (!uniq.length) return new Set();
+
+  const valid = new Set();
+  const toFetch = [];
+  for (const w of uniq) {
+    if (dictCache.has(w)) {
+      if (dictCache.get(w)) valid.add(w);
+    } else {
+      toFetch.push(w);
+    }
+  }
+  if (!toFetch.length) return valid;
+
+  // Викисловарь принимает до 50 titles, разделитель |
+  const batches = [];
+  for (let i = 0; i < toFetch.length; i += 50) batches.push(toFetch.slice(i, i + 50));
+
+  for (const batch of batches) {
+    const url = 'https://ru.wiktionary.org/w/api.php?action=query&format=json&origin=*&titles=' +
+                encodeURIComponent(batch.join('|'));
+    let json;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      json = await res.json();
+    } catch (e) {
+      // сетевая ошибка — отменяем проверку целиком, чтобы не наполовину
+      return null;
+    }
+    const pages = (json && json.query && json.query.pages) || {};
+    // По умолчанию слова из batch считаем отсутствующими
+    for (const w of batch) dictCache.set(w, false);
+    // Перезаписываем те, что нашлись
+    for (const id in pages) {
+      const p = pages[id];
+      if (p && !('missing' in p)) {
+        const t = String(p.title || '').toLowerCase().replace(/ё/g, 'е');
+        dictCache.set(t, true);
+        valid.add(t);
+      }
+    }
+  }
+  return valid;
 }
 
 function gradeResult(count) {
@@ -1105,6 +1190,8 @@ const state = {
   rejectedWords: [],                          // не подошли по эвристике (лежат отдельно, можно вернуть)
   excludedWords: new Set(),                   // снятые на экране подсчёта (из matched)
   reincludedWords: new Set(),                 // возвращённые из rejected
+  dictValid: null,                            // Set<string> | null — какие слова есть в Викисловаре. null если не проверяли / offline.
+  dictReincluded: new Set(),                  // возвращённые из «не найдено в словаре»
   manualCount: 0,
   countAuto: null,
   timer: null,
@@ -1588,27 +1675,79 @@ function showCountScreen() {
     ? 'В режиме «смешанный» учитываются любые слова.'
     : 'Засчитываются слова, похожие на ' + (POS_ACCUSATIVE[state.pos] || '') + '. Авто-фильтр по окончаниям, может ошибаться.';
 
+  state.dictValid = null;
+  state.dictReincluded = new Set();
+
   if (isVoice) {
     state.countAuto = state.matchedWords.length;
     renderWordList();
     renderRejectedList();
+    renderInvalidList();
     syncCountFromWords();
+    runDictCheck();
   } else {
     state.countAuto = null;
     state.manualCount = 0;
     el('numInput').value = '0';
+    el('invalidBlock').style.display = 'none';
+    el('dictStatus').style.display = 'none';
   }
   goto('count');
+}
+
+let dictCheckId = 0;
+async function runDictCheck() {
+  const myId = ++dictCheckId;
+  const allWords = state.matchedWords.concat(state.rejectedWords);
+  if (!allWords.length) { el('dictStatus').style.display = 'none'; return; }
+
+  const status = el('dictStatus');
+  status.style.display = '';
+  status.innerHTML = '<span class="spin"></span> Проверяю слова по Викисловарю…';
+
+  const valid = await checkInDictionary(allWords);
+  if (myId !== dictCheckId) return; // экран сменился
+
+  if (!valid) {
+    status.innerHTML = '⚠ Нет связи с Викисловарём — проверка пропущена';
+    state.dictValid = null;
+    return;
+  }
+
+  state.dictValid = valid;
+  const invalidCount = allWords.filter(w => !valid.has(w)).length;
+  status.innerHTML = invalidCount
+    ? `🔎 Викисловарь: ${invalidCount} ${pluralWords(invalidCount)} не найдено`
+    : '✓ Все слова есть в Викисловаре';
+
+  renderWordList();
+  renderRejectedList();
+  renderInvalidList();
+  syncCountFromWords();
+}
+
+function pluralWords(n) {
+  const last = n % 10, last2 = n % 100;
+  if (last2 >= 11 && last2 <= 14) return 'слов';
+  if (last === 1) return 'слово';
+  if (last >= 2 && last <= 4) return 'слова';
+  return 'слов';
+}
+
+// Слово считается «не в словаре», только если проверку успешно сделали и слова нет в valid-сете
+function isInvalidByDict(w) {
+  return state.dictValid !== null && !state.dictValid.has(w);
 }
 
 function renderWordList() {
   const wrap = el('wordList');
   wrap.innerHTML = '';
-  if (!state.matchedWords.length) {
+  const visible = state.matchedWords.filter(w => !isInvalidByDict(w));
+  if (!visible.length) {
     wrap.innerHTML = '<div class="word-list-empty">Ничего не подошло — посмотрите ниже отбракованное</div>';
     return;
   }
-  for (const w of state.matchedWords) {
+  for (const w of visible) {
     const row = document.createElement('button');
     row.type = 'button';
     const checked = !state.excludedWords.has(w);
@@ -1628,13 +1767,14 @@ function renderWordList() {
 function renderRejectedList() {
   const block = el('rejectedBlock');
   const wrap = el('rejectedList');
-  if (!state.rejectedWords.length || state.pos === 'mixed') {
+  const visible = state.rejectedWords.filter(w => !isInvalidByDict(w));
+  if (!visible.length || state.pos === 'mixed') {
     block.style.display = 'none';
     return;
   }
   block.style.display = '';
   wrap.innerHTML = '';
-  for (const w of state.rejectedWords) {
+  for (const w of visible) {
     const row = document.createElement('button');
     row.type = 'button';
     const checked = state.reincludedWords.has(w);
@@ -1651,19 +1791,80 @@ function renderRejectedList() {
   }
 }
 
+function renderInvalidList() {
+  const block = el('invalidBlock');
+  const wrap = el('invalidList');
+  if (state.dictValid === null) {
+    block.style.display = 'none';
+    return;
+  }
+  const all = state.matchedWords.concat(state.rejectedWords);
+  // дедуп с сохранением порядка
+  const seen = new Set();
+  const invalid = [];
+  for (const w of all) {
+    if (seen.has(w)) continue;
+    seen.add(w);
+    if (!state.dictValid.has(w)) invalid.push(w);
+  }
+  if (!invalid.length) {
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = '';
+  wrap.innerHTML = '';
+  for (const w of invalid) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    const checked = state.dictReincluded.has(w);
+    row.className = 'word-item invalid' + (checked ? ' checked' : '');
+    row.innerHTML = `<span class="check"></span><span class="word"></span>`;
+    row.querySelector('.word').textContent = w;
+    row.addEventListener('click', () => {
+      if (state.dictReincluded.has(w)) state.dictReincluded.delete(w);
+      else state.dictReincluded.add(w);
+      renderInvalidList();
+      syncCountFromWords();
+    });
+    wrap.appendChild(row);
+  }
+}
+
 function syncCountFromWords() {
-  const fromMatched  = state.matchedWords.filter(w => !state.excludedWords.has(w)).length;
-  const fromRejected = state.rejectedWords.filter(w => state.reincludedWords.has(w)).length;
-  const n = fromMatched + fromRejected;
+  const fromMatched  = state.matchedWords.filter(w =>
+    !state.excludedWords.has(w) && !isInvalidByDict(w)
+  ).length;
+  const fromRejected = state.rejectedWords.filter(w =>
+    state.reincludedWords.has(w) && !isInvalidByDict(w)
+  ).length;
+  const fromInvalid = (state.dictValid !== null)
+    ? state.matchedWords.concat(state.rejectedWords)
+        .filter(w => !state.dictValid.has(w) && state.dictReincluded.has(w)).length
+    : 0;
+  const n = fromMatched + fromRejected + fromInvalid;
   state.manualCount = n;
   el('numInput').value = String(n);
 }
 
 function getFinalWords() {
-  const out = [];
-  for (const w of state.matchedWords)  if (!state.excludedWords.has(w))  out.push(w);
-  for (const w of state.rejectedWords) if (state.reincludedWords.has(w)) out.push(w);
-  return out;
+  const out = new Set();
+  for (const w of state.matchedWords) {
+    if (state.excludedWords.has(w)) continue;
+    if (isInvalidByDict(w)) continue;
+    out.add(w);
+  }
+  for (const w of state.rejectedWords) {
+    if (!state.reincludedWords.has(w)) continue;
+    if (isInvalidByDict(w)) continue;
+    out.add(w);
+  }
+  if (state.dictValid !== null) {
+    for (const w of state.matchedWords.concat(state.rejectedWords)) {
+      if (state.dictValid.has(w)) continue;
+      if (state.dictReincluded.has(w)) out.add(w);
+    }
+  }
+  return Array.from(out);
 }
 
 el('decBtn').addEventListener('click', () => {
