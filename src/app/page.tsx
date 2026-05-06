@@ -8,7 +8,8 @@ import {
 import { pickLetter } from '@/lib/letters';
 import { looksLikePOS } from '@/lib/words';
 import { gradeResult } from '@/lib/grade';
-import { checkInDictionary } from '@/lib/dict';
+import { checkInDictionary, fetchVocabularyForLetter } from '@/lib/dict';
+import { createLiveValidator, type LiveValidator } from '@/lib/liveValidator';
 import {
   getSettings, setSettings as saveSettingsToStorage,
   getLastLetters, pushLastLetter,
@@ -45,6 +46,11 @@ export default function App() {
 
   const timerRef = useRef<Timer | null>(null);
   const recognizerRef = useRef<Recognizer | null>(null);
+  const liveValidatorRef = useRef<LiveValidator | null>(null);
+
+  // Live-словарная проверка во время таймера: word → true/false (после ответа), undefined пока pending
+  const [liveDict, setLiveDict] = useState<Map<string, boolean>>(new Map());
+  const [liveOffline, setLiveOffline] = useState(false);
 
   // ----- Подсчёт -----
   const [excludedWords, setExcludedWords] = useState<Set<string>>(new Set());
@@ -57,6 +63,8 @@ export default function App() {
 
   // ----- Результат -----
   const [resultAttempt, setResultAttempt] = useState<Attempt | null>(null);
+  const [vocabWords, setVocabWords] = useState<string[] | null>(null);
+  const [vocabStatus, setVocabStatus] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading');
 
   // ----- Modals/toast -----
   const [showSettings, setShowSettings] = useState(false);
@@ -132,6 +140,7 @@ export default function App() {
   const finishAttempt = useCallback((viaStop: boolean) => {
     if (timerRef.current) { timerRef.current.stop(); timerRef.current = null; }
     if (recognizerRef.current) { recognizerRef.current.stop(); recognizerRef.current = null; }
+    if (liveValidatorRef.current) { liveValidatorRef.current.flush(); }
     setWarn(false);
     if (!viaStop) {
       if (settings.soundOn) playEndBeep();
@@ -152,6 +161,26 @@ export default function App() {
     setRejectedWords([]);
     setLastWord(null);
     setVoiceMode(false);
+    setLiveDict(new Map());
+    setLiveOffline(false);
+
+    // Live-валидатор: сразу шлёт каждое новое слово в Wiktionary, дебанс 400мс.
+    if (liveValidatorRef.current) liveValidatorRef.current.cancel();
+    liveValidatorRef.current = createLiveValidator({
+      debounceMs: 400,
+      onResult: (word, valid) => {
+        if (valid === null) {
+          // Сеть упала — больше не претендуем что фильтруем live
+          setLiveOffline(true);
+          return;
+        }
+        setLiveDict(prev => {
+          const next = new Map(prev);
+          next.set(word, valid);
+          return next;
+        });
+      },
+    });
 
     if (getMicPermission() === 'granted' && getSR()) {
       const rec = createRecognizer(
@@ -162,6 +191,8 @@ export default function App() {
           for (const w of words) {
             if (looksLikePOS(pos, w)) matched.push(w);
             else rejected.push(w);
+            // Каждое распознанное слово — сразу в очередь словарной проверки
+            liveValidatorRef.current?.enqueue(w);
           }
           setMatchedWords(matched);
           setRejectedWords(rejected);
@@ -198,24 +229,72 @@ export default function App() {
     timerRef.current = t;
   }, [letter, pos, settings.duration, finishAttempt]);
 
-  // ===== Словарная проверка по входе на count =====
+  // ===== На экране результата — подгружаем 50 слов на букву =====
+  useEffect(() => {
+    if (screen !== 'result' || !resultAttempt) return;
+    let cancelled = false;
+    setVocabWords(null);
+    setVocabStatus('loading');
+    void (async () => {
+      const list = await fetchVocabularyForLetter(resultAttempt.letter, resultAttempt.partOfSpeech, 50);
+      if (cancelled) return;
+      if (list === null) { setVocabStatus('error'); return; }
+      if (list.length === 0) { setVocabStatus('empty'); return; }
+      setVocabWords(list);
+      setVocabStatus('ok');
+    })();
+    return () => { cancelled = true; };
+  }, [screen, resultAttempt]);
+
+  // ===== На экране подсчёта используем уже накопленный liveDict =====
   useEffect(() => {
     if (screen !== 'count') return;
     const all = matchedWords.concat(rejectedWords);
     if (!all.length) { setDictStatus({ kind: 'idle', text: '' }); return; }
-    let cancelled = false;
-    setDictStatus({ kind: 'loading', text: 'Проверяю слова по Викисловарю…' });
     setCountAuto(matchedWords.length);
+
+    // Если live-режим был оффлайн — никакой словарной фильтрации
+    if (liveOffline) {
+      setDictValid(null);
+      setDictStatus({ kind: 'error', text: '⚠ Нет связи с Викисловарём — проверка пропущена' });
+      return;
+    }
+
+    // liveDict уже содержит ответы по большинству слов. Дочекаем оставшиеся (если есть).
+    const validSet = new Set<string>();
+    for (const [w, v] of liveDict.entries()) if (v) validSet.add(w);
+
+    const unchecked = all
+      .map(w => w.toLowerCase().replace(/ё/g, 'е'))
+      .filter(w => !liveDict.has(w));
+
+    if (unchecked.length === 0) {
+      setDictValid(validSet);
+      const invalidCount = all.filter(w => !validSet.has(w)).length;
+      setDictStatus({
+        kind: 'done',
+        text: invalidCount
+          ? `🔎 Викисловарь: ${invalidCount} ${pluralWords(invalidCount)} не найдено`
+          : '✓ Все слова есть в Викисловаре',
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setDictStatus({ kind: 'loading', text: 'Дочекаю остальные слова…' });
     void (async () => {
-      const valid = await checkInDictionary(all);
+      const v = await checkInDictionary(unchecked);
       if (cancelled) return;
-      if (!valid) {
+      if (!v) {
         setDictValid(null);
         setDictStatus({ kind: 'error', text: '⚠ Нет связи с Викисловарём — проверка пропущена' });
         return;
       }
-      setDictValid(valid);
-      const invalidCount = all.filter(w => !valid.has(w)).length;
+      // объединяем с liveDict
+      const merged = new Set<string>(validSet);
+      for (const w of v) merged.add(w);
+      setDictValid(merged);
+      const invalidCount = all.filter(w => !merged.has(w)).length;
       setDictStatus({
         kind: 'done',
         text: invalidCount
@@ -224,7 +303,7 @@ export default function App() {
       });
     })();
     return () => { cancelled = true; };
-  }, [screen, matchedWords, rejectedWords]);
+  }, [screen, matchedWords, rejectedWords, liveDict, liveOffline]);
 
   // ===== Финал =====
   const isInvalidByDict = (w: string) => dictValid !== null && !dictValid.has(w);
@@ -286,6 +365,7 @@ export default function App() {
   const resetSession = useCallback(() => {
     if (timerRef.current) { timerRef.current.stop(); timerRef.current = null; }
     if (recognizerRef.current) { recognizerRef.current.stop(); recognizerRef.current = null; }
+    if (liveValidatorRef.current) { liveValidatorRef.current.cancel(); liveValidatorRef.current = null; }
     setWarn(false);
     setMatchedWords([]);
     setRejectedWords([]);
@@ -293,6 +373,8 @@ export default function App() {
     setReincludedWords(new Set());
     setDictReincluded(new Set());
     setDictValid(null);
+    setLiveDict(new Map());
+    setLiveOffline(false);
     setManualCount(0);
     setCountAuto(null);
     setLastWord(null);
@@ -428,12 +510,19 @@ export default function App() {
                   {(lastWord.ok ? '🎙 ' : '⚠️ ') + lastWord.text}
                 </div>
               )}
-              {voiceMode && (
-                <div className="count">
-                  Слов: <strong>{matchedWords.length}</strong>
-                  {rejectedWords.length > 0 && <span style={{ color: 'var(--text-dim)' }}> · {rejectedWords.length} отбраковано</span>}
-                </div>
-              )}
+              {voiceMode && (() => {
+                // Учитываем словарь в live-режиме: считаем только matched && (подтверждено true || offline)
+                const verified = matchedWords.filter(w => liveOffline || liveDict.get(w) === true).length;
+                const pending = matchedWords.filter(w => !liveOffline && !liveDict.has(w)).length;
+                const invalid = matchedWords.filter(w => liveDict.get(w) === false).length + rejectedWords.length;
+                return (
+                  <div className="count">
+                    Слов: <strong>{verified}</strong>
+                    {pending > 0 && <span style={{ color: 'var(--text-dim)' }}> · 🔎 {pending} проверяю</span>}
+                    {invalid > 0 && <span style={{ color: 'var(--text-dim)' }}> · {invalid} отбраковано</span>}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <button className="btn btn-block" type="button" onClick={() => finishAttempt(true)}>Стоп</button>
@@ -483,6 +572,8 @@ export default function App() {
       {screen === 'result' && resultAttempt && (
         <ResultScreen
           attempt={resultAttempt}
+          vocabWords={vocabWords}
+          vocabStatus={vocabStatus}
           onHome={() => setScreen('home')}
           onAgain={() => { void startDraw(); }}
         />
@@ -661,7 +752,13 @@ function CountScreen(props: {
 }
 
 // ============================================
-function ResultScreen({ attempt, onHome, onAgain }: { attempt: Attempt; onHome: () => void; onAgain: () => void }) {
+function ResultScreen({ attempt, vocabWords, vocabStatus, onHome, onAgain }: {
+  attempt: Attempt;
+  vocabWords: string[] | null;
+  vocabStatus: 'loading' | 'ok' | 'empty' | 'error';
+  onHome: () => void;
+  onAgain: () => void;
+}) {
   const grade = gradeResult(attempt.count);
   return (
     <section className="screen">
@@ -672,6 +769,25 @@ function ResultScreen({ attempt, onHome, onAgain }: { attempt: Attempt; onHome: 
         <div className="result-meta">Буква {attempt.letter} · {POS_LABEL_LOWER[attempt.partOfSpeech]}</div>
         <div className="result-support">{grade.support}</div>
       </div>
+
+      <div className="vocab-block">
+        <div className="word-list-title">Расширь словарь · ещё слова на букву {attempt.letter}</div>
+        {vocabStatus === 'loading' && (
+          <div className="dict-status"><span className="spin"></span><span>Подбираю 50 слов из Викисловаря…</span></div>
+        )}
+        {vocabStatus === 'error' && (
+          <div className="word-list-sub">⚠ Не получилось загрузить — нет связи с Викисловарём.</div>
+        )}
+        {vocabStatus === 'empty' && (
+          <div className="word-list-sub">На эту букву Викисловарь не дал результатов.</div>
+        )}
+        {vocabStatus === 'ok' && vocabWords && (
+          <div className="vocab-grid">
+            {vocabWords.map(w => <span key={w} className="vocab-chip">{w}</span>)}
+          </div>
+        )}
+      </div>
+
       <div className="btn-row">
         <button className="btn" type="button" onClick={onHome}>На главную</button>
         <button className="btn btn-primary" type="button" onClick={onAgain}>Ещё раз</button>
