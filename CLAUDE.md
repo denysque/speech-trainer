@@ -5,49 +5,84 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Two things sit side by side here:
+«Слова на букву» — минутный тренажёр беглости речи для спикеров. Раньше был single-file vanilla HTML/CSS/JS (`legacy/index.html`), сейчас переехал на **Next.js 16 + React 19 + TypeScript + Tailwind 4** (App Router, Turbopack).
 
-1. **[index.html](index.html)** — a finished, self-contained Pulse Product Analytics dashboard demo (Russian UI). Single-file vanilla HTML/CSS/JS, ~1550 lines. No dependencies, no build, no backend. Charts are hand-rolled on `<canvas>`, data is generated via a seeded PRNG (`seededRandom` + `generateSeries` with growth/seasonality/noise). Treat this file as a **design-system reference**: its CSS custom properties (`--bg`, `--surface`, `--accent`, `--red`, `--green`, etc., defined at [index.html:7-29](index.html#L7-L29)) are the visual tokens for anything new built in this repo.
+## Stack
 
-2. **[SPEC.md](SPEC.md)** — the source of truth for the next app to build: «Слова на букву» (Speech Trainer), a 60-second public-speaking warmup. The spec is opinionated and prescriptive: read it end-to-end before writing code. It includes the implementation order (12 steps), exact data shapes, localStorage keys, function signatures, edge cases, and acceptance criteria. **Do not invent behavior the spec already pins down.**
+- **Next.js 16** (App Router, Turbopack) — `src/app/`
+- **React 19**
+- **TypeScript 5**
+- **Tailwind 4** через `@import "tailwindcss"` в `src/app/globals.css` — конфиг через `@theme`-директиву прямо в CSS, **отдельного `tailwind.config.js` нет**
+- **Node 18.18+** (на машине стоит 25.x)
+
+⚠️ См. [AGENTS.md](AGENTS.md) — там Next-овский шаблон оставил предупреждение: APIs и структура Next 16 могут отличаться от тренировочных данных. Перед нетривиальными правками — заглядывайте в `node_modules/next/dist/docs/`.
 
 ## Run / develop
 
-There is no build, no package manager, no test runner. Open the HTML file directly in a browser:
-
 ```bash
-open index.html                    # macOS
-python3 -m http.server 8000        # if you need a local server (e.g. for SpeechRecognition / iOS testing)
+npm install
+npm run dev          # dev server, http://localhost:3000
+npm run build        # production build (всегда прогоняйте перед коммитом — ловит TS и lint)
+npm run start        # запуск production-сборки
+npm run lint         # eslint
 ```
 
-The Speech Trainer must be tested on **mobile** (Android Chrome + iOS Safari) — the spec's acceptance criteria are mobile-specific (microphone permission, timer correctness when the tab is backgrounded, vibration). Desktop testing alone is insufficient.
+Тестов нет.
 
-## Architecture rules baked into SPEC.md
+## Architecture
 
-These are non-obvious constraints from the spec that are easy to get wrong:
+Один клиентский компонент-оркестратор `src/app/page.tsx` (≈600 строк) с состоянием `screen: 'home' | 'draw' | 'timer' | 'count' | 'result'` и условным рендерингом. **Без клиентского роутинга** — спека описывала именно эту модель (`data-screen` атрибут), на App Router она ложится один-в-один.
 
-- **Single-file by default.** Stay in one HTML file with inline `<script>`/`<style>` unless you decide to introduce Vite (the spec explicitly recommends starting single-file). No frameworks.
-- **Screen routing via `data-screen` attribute on `<body>`** + class toggling. No client-side router.
-- **Timer uses `Date.now()` deltas via `requestAnimationFrame`, not `setInterval` tick counts.** This is required so the countdown stays correct when the user backgrounds the tab or locks the phone — a `setInterval`-based timer will silently drift or freeze on mobile and fail acceptance.
-- **Web Speech API degrades gracefully to manual input.** This is mandatory, not optional. If `SpeechRecognition` is missing, the user denies the mic, `start()` throws (e.g. mic held by Zoom, in-app webview like Telegram/Instagram), or any other failure path — fall back to the manual numeric-input flow without crashing.
-- **Russian alphabet for the randomizer = 28 letters**, listed at [SPEC.md:124](SPEC.md#L124). Excludes `Ъ Ы Ь Й` (no words start with them); collapses `Ё → Е` everywhere — both in the alphabet and when normalizing recognized speech. Don't repeat the last 3 picked letters (persisted in `localStorage`).
-- **Word matching is intentionally lenient.** `extractMatchingWords` filters by first-letter match, length ≥ 2, and dedup — it does **not** verify part of speech. The spec is explicit: no automatic part-of-speech check, no dictionary, no LLM. The user curates the list on the result screen.
-- **`gradeResult` thresholds** are exact and tested at boundaries 10/20/30 — see the table at [SPEC.md:65-70](SPEC.md#L65-L70). Implement as a pure function; the acceptance checklist verifies the labels precisely.
-- **localStorage namespace is `speech-trainer:*`** — keys enumerated at [SPEC.md:144-147](SPEC.md#L144-L147). History is capped at 50 entries (display 5).
-- **Mobile-first, large tap targets (≥44px), one-column layout, primary action under the thumb.** The letter-draw is ~30vh, the timer digits ~20vh — this is an action tool, not a dashboard. Respect `prefers-reduced-motion` (disables the last-10-seconds pulse).
-- **No confirmation modals on primary actions.** Stop stops, "Ещё раз" immediately rerolls.
+Подэкраны `CountScreen` и `ResultScreen` вынесены в тот же файл как функции-компоненты — это пока не оправдывает отдельного файла, но если разрастутся — переедут в `src/components/`.
 
-## Out of scope (per the spec)
+### Чистые функции — `src/lib/`
 
-Don't add: accounts, backend sync, automatic part-of-speech detection, additional exercises beyond «Слова на букву», social-share buttons, timer pause. Architecture should be extensible (screens as modules, exercise as a pluggable concept) but the second exercise is explicitly not built in v1.
+| Файл | Что |
+|---|---|
+| `constants.ts` | LETTERS (28 букв, без `Ъ Ы Ь Й`), PARTS_OF_SPEECH, `STORAGE_KEYS` (`speech-trainer:*`), типы `Attempt`/`Settings` |
+| `letters.ts` | `pickLetter(last)` с антиповтором последних 3 |
+| `words.ts` | `extractMatchingWords` (фильтр по первой букве, длина ≥2, дедуп, `Ё→Е`) и `looksLikePOS` (эвристика по окончаниям) |
+| `grade.ts` | `gradeResult` — точные пороги 10/20/30 + поле `support` с мотивационным текстом |
+| `dict.ts` | `checkInDictionary` — батчевый запрос к ru.wiktionary.org (до 50 слов в одном `titles=`), кеш в `Map`. Возвращает `null` при сетевой ошибке |
+| `timer.ts` | `createTimer` — Date.now()-дельты через rAF + setTimeout-страховка для фона. Плюс `playEndBeep` и `vibrate` |
+| `recognizer.ts` | Web Speech API wrapper + `ensureMicPermission` (Permissions API → getUserMedia fallback) |
+| `storage.ts` | localStorage CRUD для settings/history/last-letters/pos-choice/mic-permission. `isClient()` гард для SSR |
+| `format.ts` | `formatDurationSec` (правильные склонения «секунду/секунды/секунд»), `pluralWords`, `formatRelativeDate` |
 
-## Working with the existing dashboard
+### Дизайн-система
 
-If you need to extract styles or patterns from [index.html](index.html) for the new app:
-- CSS variables block: [index.html:7-29](index.html#L7-L29).
-- The dashboard is **demo data** — `seededRandom`/`generateSeries` produce deterministic charts. Don't treat its numbers as real metrics or wire it up to a backend.
-- The existing dashboard's grid/sidebar layout is desktop-first. The Speech Trainer needs its own mobile-first layout — reuse tokens, not structure.
+CSS custom properties в `:root` блоке `src/app/globals.css` (`--bg`, `--surface`, `--accent`, `--red`, `--green` и т.д.). Tailwind `@theme inline` переменные пробрасывают их в утилиты. Кастомные компонентные классы (`.btn`, `.btn-primary`, `.screen`, `.pos-item`, `.word-item`, `.modal`, `.toast`, `.reset-btn`) — в том же globals.css. Тailwind-утилиты используются точечно.
 
-## Language / locale
+## Architecture rules баshked в SPEC.md (валидны для обоих стеков)
 
-UI text is Russian. Keep it Russian unless the user asks otherwise. `lang="ru"` on `<html>`, `lang='ru-RU'` on `SpeechRecognition`. Number/date formatting uses `'ru-RU'` locale.
+Эти константы продолжают работать; новые шаги читайте в [SPEC.md](SPEC.md), даже несмотря на то что часть «No frameworks / Single-file» теперь устарела:
+
+- **Алфавит = 28 букв** (`Ъ Ы Ь Й` исключены, `Ё → Е` нормализуется), последние 3 не повторяются (`speech-trainer:last-letters`).
+- **Таймер на `Date.now()`-дельтах**, иначе ломается при сворачивании вкладки на iOS. Никаких `setInterval`-тиков для отсчёта.
+- **Web Speech API graceful-деградирует в ручной ввод.** Если SR нет, mic deny, `start()` бросает (Telegram WebView, Zoom держит mic) — сразу numeric input, без падений.
+- **Эвристика части речи — мягкий фильтр.** Спека изначально запрещала автопроверку, но добавили по запросу: `looksLikePOS` делит распознанное на «подходит» / «отбраковано», UI показывает обе секции с возможностью вернуть тапом. Спека после этого формально устарела, но сама модель «лениво, можно вернуть» — выдержана.
+- **Викисловарь.** На экране подсчёта проверяем все слова через `ru.wiktionary.org/w/api.php`, отсутствующие — в третью секцию «Не найдено в словаре». Сетевые ошибки — молча пропускаем.
+- **`gradeResult` пороги 10/20/30** — точные, прописаны в SPEC.md, тесты в legacy совпадали.
+- **localStorage namespace `speech-trainer:*`** — keys в `src/lib/constants.ts`, история капится 50 записей, на главной показывается 5.
+- **Mobile-first, ≥44px тачи, prefers-reduced-motion** — отключает пульсацию таймера и анимацию жеребьёвки.
+
+## Deploy
+
+- **Vercel** — продакшн-деплой автоматически при push в `main`. URL вида `https://speech-trainer-*.vercel.app`.
+- **GitHub Pages** в этом репо больше не используется (он рендерил старый `index.html`, который теперь в `legacy/`). Выключать настройку Pages не обязательно — она просто 404 на корне.
+
+## Telegram Mini App
+
+Бот: **`@slovanabukvubot`** (Direct Link `t.me/slovanabukvubot/bot` или `…/slova-na-bukvu`). После переезда на Vercel **URL Mini App в BotFather нужно обновить** на новый Vercel-домен (раньше указывал на `denysque.github.io/speech-trainer/`).
+
+⚠️ Важное ограничение, которое нельзя обойти переписыванием стека: **WebKit (Safari, Telegram WebView на iOS и macOS) не поддерживает SpeechRecognition.** Голос работает только в Chromium-based браузерах (Chrome/Edge на десктопе, Chrome/Samsung Internet на Android) и в Telegram Desktop на Windows/Linux. На iPhone и Mac в Telegram — приложение должно автоматически свалиться в ручной режим.
+
+Если потребуется голос-в-Telegram-на-iPhone, путь один: серверный STT (Whisper / Yandex SpeechKit / Google) через Next-овский API route. Это уже бэкенд + ключи + бюджет.
+
+## Что в `legacy/`
+
+`legacy/index.html` — старая single-file vanilla сборка ~1700 строк. Её можно использовать как референс для UX-нюансов или быстрых проверок логики. `legacy/icon-640x360.png` — иконка для Telegram Mini App, всё ещё актуальна.
+
+## Locale
+
+UI на русском. `lang="ru"` в layout, `lang='ru-RU'` в SpeechRecognition. Числа/даты — `'ru-RU'` локаль.
