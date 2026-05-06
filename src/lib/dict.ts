@@ -91,11 +91,16 @@ async function fetchCategoryPage(category: string, letterLower: string): Promise
     + '&cmstartsortkeyprefix=' + encodeURIComponent(letterLower);
   try {
     const res = await fetch(url);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn('[vocab] HTTP', res.status, category);
+      return [];
+    }
     const json: { query?: { categorymembers?: Array<{ title: string }> } } = await res.json();
     const list = json.query?.categorymembers || [];
+    console.log('[vocab]', category, '→', list.length, 'pages');
     return list.map(p => p.title).filter(Boolean);
-  } catch {
+  } catch (e) {
+    console.error('[vocab] fetch failed', category, e);
     return [];
   }
 }
@@ -112,6 +117,7 @@ export async function fetchVocabularyForLetter(letter: string, pos: PartOfSpeech
     const cats = CATEGORY_BY_POS[pos] || CATEGORY_BY_POS.mixed;
     const batches = await Promise.all(cats.map(c => fetchCategoryPage(c, letterNorm)));
     const merged = ([] as string[]).concat(...batches);
+    console.log('[vocab] merged total:', merged.length);
     if (!merged.length) return null;
     pool = merged
       .filter(t => {
@@ -121,10 +127,14 @@ export async function fetchVocabularyForLetter(letter: string, pos: PartOfSpeech
       .map(t => t.toLowerCase());
     // дедуп
     pool = Array.from(new Set(pool));
+    console.log('[vocab] after filter:', pool.length, '· sample:', pool.slice(0, 8));
     vocabCache.set(cacheKey, pool);
   }
 
-  if (!pool.length) return null;
+  if (!pool.length) {
+    console.warn('[vocab] empty pool for', cacheKey);
+    return null;
+  }
 
   // Случайная выборка count из пула (Fisher–Yates на копии)
   const arr = pool.slice();

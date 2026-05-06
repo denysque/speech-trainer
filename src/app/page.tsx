@@ -771,17 +771,18 @@ function ResultScreen({ attempt, vocabWords, vocabStatus, onHome, onAgain }: {
       </div>
 
       <div className="vocab-block">
-        <div className="word-list-title">Расширь словарь · ещё слова на букву {attempt.letter}</div>
+        <div className="vocab-title">Расширь словарь — ещё 50 слов на букву {attempt.letter}</div>
+        <div className="vocab-sub">Слова из Викисловаря, которые могут пригодиться. Подобрано в выбранной части речи: {POS_LABEL_LOWER[attempt.partOfSpeech]}.</div>
         {vocabStatus === 'loading' && (
           <div className="dict-status"><span className="spin"></span><span>Подбираю 50 слов из Викисловаря…</span></div>
         )}
         {vocabStatus === 'error' && (
-          <div className="word-list-sub">⚠ Не получилось загрузить — нет связи с Викисловарём.</div>
+          <div className="word-list-sub">⚠ Не получилось загрузить. Откройте devtools и проверьте консоль — там будет причина.</div>
         )}
         {vocabStatus === 'empty' && (
           <div className="word-list-sub">На эту букву Викисловарь не дал результатов.</div>
         )}
-        {vocabStatus === 'ok' && vocabWords && (
+        {vocabStatus === 'ok' && vocabWords && vocabWords.length > 0 && (
           <div className="vocab-grid">
             {vocabWords.map(w => <span key={w} className="vocab-chip">{w}</span>)}
           </div>
