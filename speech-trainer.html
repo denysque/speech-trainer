@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0c12" />
+<title>Слова на букву — тренажёр речи</title>
+<style>
+  :root {
+    --bg: #0a0c12;
+    --surface: #11141c;
+    --surface-2: #161a24;
+    --surface-hover: #1c2030;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #f4f5f7;
+    --text-muted: #8b90a0;
+    --text-dim: #5f6473;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --red: #ef4444;
+    --red-soft: rgba(239, 68, 68, 0.18);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+    --tap: 48px;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* === Routing === */
+  .screen { display: none; }
+  body[data-screen="home"]    .screen[data-name="home"],
+  body[data-screen="draw"]    .screen[data-name="draw"],
+  body[data-screen="timer"]   .screen[data-name="timer"],
+  body[data-screen="count"]   .screen[data-name="count"],
+  body[data-screen="result"]  .screen[data-name="result"] {
+    display: flex;
+  }
+
+  .screen {
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+    gap: 16px;
+  }
+
+  .grow { flex: 1; }
+
+  /* === Buttons === */
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 16px;
+    font-weight: 600;
+    min-height: var(--tap);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+    line-height: 1.2;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:hover { background: var(--surface-hover); }
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-2); }
+
+  .btn-block { width: 100%; }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .icon-btn {
+    width: var(--tap);
+    height: var(--tap);
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+  .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* === Home === */
+  .home-head {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .title-block { text-align: center; margin-top: 12px; }
+  .title-block h1 {
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .title-block p {
+    color: var(--text-muted);
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .pos-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .pos-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    min-height: var(--tap);
+    cursor: pointer;
+  }
+  .pos-item .label { font-weight: 600; }
+  .pos-item .hint  { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+  .pos-item.active {
+    border-color: var(--accent);
+    background: linear-gradient(0deg, rgba(99,102,241,0.10), rgba(99,102,241,0.10)), var(--surface);
+  }
+  .pos-item .check {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    flex-shrink: 0;
+    margin-left: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pos-item.active .check {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+  .pos-item.active .check::after {
+    content: "";
+    width: 8px; height: 4px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+  }
+
+  .history-block { margin-top: 12px; }
+  .history-title {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+  .history-item .date { color: var(--text-dim); font-size: 12px; }
+  .history-empty { color: var(--text-dim); font-size: 13px; }
+
+  /* === Hero / explainer === */
+  .hero {
+    background: linear-gradient(140deg, rgba(99,102,241,0.10), rgba(236,72,153,0.06));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .hero strong { color: var(--text); }
+
+  .step-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: -4px;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .pos-context {
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: var(--text-muted);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .pos-context strong { color: var(--text); }
+
+  .footer-promo {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .footer-promo a {
+    color: var(--text-muted);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-bottom: 1px dotted var(--text-dim);
+    padding-bottom: 1px;
+  }
+  .footer-promo a:hover { color: var(--accent-2); border-color: var(--accent-2); }
+  .footer-promo svg { vertical-align: -2px; }
+  .footer-promo .built {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+  }
+
+  /* === Draw context === */
+  .draw-context {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: center;
+  }
+  .draw-context strong { color: var(--text); }
+
+  /* === Rejected words === */
+  .rejected-block {
+    margin-top: 10px;
+  }
+  .word-list-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin: 4px 0 6px;
+    line-height: 1.4;
+  }
+  .word-item.rejected {
+    opacity: 0.6;
+    border-style: dashed;
+  }
+  .word-item.rejected .word { color: var(--text-dim); text-decoration: line-through; }
+  .word-item.rejected.checked { opacity: 1; }
+  .word-item.rejected.checked .word { color: var(--text); text-decoration: none; }
+
+  /* === Result support === */
+  .result-support {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 360px;
+    text-align: left;
+  }
+  .result-support strong { color: var(--text); }
+
+  /* === Draw === */
+  .draw-pos {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .letter-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  .letter-big {
+    font-size: 30vh;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-align: center;
+    color: var(--text);
+    user-select: none;
+  }
+  .letter-big.spinning { color: var(--accent-2); }
+  .draw-hint { color: var(--text-muted); font-size: 14px; }
+
+  /* === Timer === */
+  .timer-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .timer-meta .letter {
+    font-weight: 700;
+    color: var(--text);
+    font-size: 18px;
+  }
+  .timer-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+  .timer-digits {
+    font-size: 22vh;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+    transition: color 0.2s;
+  }
+  body.timer-warn .timer-digits {
+    color: var(--red);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body.timer-warn .timer-digits { animation: none; }
+    .letter-big.spinning { color: var(--text); }
+  }
+
+  .timer-voice {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    min-height: 50px;
+  }
+  .timer-voice .last-word {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 18px;
+    transition: opacity 0.4s;
+  }
+  .timer-voice .count {
+    margin-top: 6px;
+    color: var(--text);
+    font-size: 16px;
+  }
+  .timer-voice .count strong { font-size: 22px; }
+
+  /* === Count === */
+  .count-head {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .count-head h2 {
+    color: var(--text);
+    font-size: 22px;
+    margin: 0 0 4px;
+  }
+
+  .num-input-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin: 12px 0;
+  }
+  .num-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 26px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .num-btn:active { transform: scale(0.95); }
+  .num-input {
+    width: 110px;
+    text-align: center;
+    font-size: 48px;
+    font-weight: 700;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    padding: 8px 0;
+    -moz-appearance: textfield;
+  }
+  .num-input::-webkit-outer-spin-button,
+  .num-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .word-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    max-height: 36vh;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .word-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+    min-height: 44px;
+  }
+  .word-item .check {
+    width: 20px; height: 20px;
+    border-radius: 6px;
+    border: 2px solid var(--border-strong);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .word-item.checked .check {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .word-item.checked .check::after {
+    content: "";
+    width: 8px; height: 4px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+  }
+  .word-item:not(.checked) .word { color: var(--text-dim); text-decoration: line-through; }
+
+  .word-list-empty {
+    color: var(--text-dim);
+    text-align: center;
+    padding: 16px;
+    font-size: 14px;
+  }
+  .word-list-title {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 6px 0;
+  }
+
+  /* === Result === */
+  .result-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+  }
+  .result-count {
+    font-size: 28vh;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .result-tier {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .result-subtitle { color: var(--text-muted); font-size: 16px; }
+  .result-meta { color: var(--text-dim); font-size: 14px; margin-top: 6px; }
+
+  .tier-warmup   { color: var(--text-muted); }
+  .tier-beginner { color: var(--accent-2); }
+  .tier-normal   { color: var(--green); }
+  .tier-master   { color: #f59e0b; }
+
+  /* === Toast === */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(24px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    max-width: calc(100% - 40px);
+    text-align: center;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* === Modal === */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modal.show { display: flex; }
+  .modal-card {
+    background: var(--surface);
+    width: 100%;
+    max-width: 480px;
+    border-radius: 18px 18px 0 0;
+    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border-strong);
+  }
+  @media (min-width: 480px) {
+    .modal { align-items: center; }
+    .modal-card { border-radius: 18px; max-width: 420px; }
+  }
+  .modal-card h3 { margin: 0 0 18px; font-size: 18px; }
+  .setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row .label { font-weight: 500; }
+
+  .seg {
+    display: inline-flex;
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 3px;
+    border: 1px solid var(--border);
+  }
+  .seg button {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    min-height: 36px;
+    min-width: 44px;
+  }
+  .seg button.active { background: var(--accent); color: #fff; }
+
+  .switch {
+    width: 48px; height: 28px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s;
+  }
+  .switch.on { background: var(--accent); border-color: var(--accent); }
+  .switch.on::after { transform: translateX(20px); }
+
+  /* === Utility === */
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); border: 0;
+  }
+</style>
+</head>
+<body data-screen="home">
+
+  <!-- Главный экран -->
+  <section class="screen" data-name="home">
+    <div class="home-head">
+      <button class="icon-btn" id="settingsBtn" aria-label="Настройки">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+
+    <div class="title-block">
+      <h1>Слова на букву</h1>
+      <p>Тренажёр беглости речи для спикеров</p>
+    </div>
+
+    <div class="hero">
+      Мини-разминка для ведущих и публичных выступающих. Выпадает случайная буква — и за <strong id="heroDuration">60 секунд</strong> нужно назвать как можно больше слов на эту букву. Подсчёт автоматический, по голосу, либо вручную, если микрофон недоступен.
+    </div>
+
+    <div class="step-label"><span class="step-num">1</span> Выбери часть речи</div>
+    <div class="pos-list" id="posList"></div>
+    <div class="pos-context" id="posContext"></div>
+
+    <div class="grow"></div>
+
+    <button class="btn btn-primary btn-block" id="startBtn">Начать</button>
+
+    <div class="history-block">
+      <div class="history-title">Последние попытки</div>
+      <div id="historyList"></div>
+    </div>
+
+    <div class="footer-promo">
+      <div>
+        <a href="https://t.me/tellychko" target="_blank" rel="noopener" aria-label="Telegram автора">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.945 4.36L18.79 19.21c-.24 1.05-.86 1.31-1.74.81l-4.81-3.55-2.32 2.23c-.26.26-.47.47-.96.47l.34-4.86 8.84-7.99c.39-.34-.08-.53-.6-.19L7.62 12.99 2.82 11.5c-1.04-.32-1.06-1.04.22-1.54l18.74-7.22c.87-.32 1.63.2 1.36 1.62z"/></svg>
+          <span>by @tellychko</span>
+        </a>
+      </div>
+      <div class="built">Сделано на чистом HTML / CSS / JavaScript · одним файлом, без бандлера</div>
+    </div>
+  </section>
+
+  <!-- Жеребьёвка -->
+  <section class="screen" data-name="draw">
+    <div class="draw-pos" id="drawPos">Существительные</div>
+
+    <div class="letter-stage">
+      <div class="letter-big" id="letterBig">А</div>
+      <div class="draw-hint" id="drawHint">кто? что?</div>
+    </div>
+
+    <div class="draw-context" id="drawContext"></div>
+
+    <div class="btn-row">
+      <button class="btn" id="rerollBtn">Перебросить</button>
+      <button class="btn btn-primary" id="goBtn">Поехали</button>
+    </div>
+  </section>
+
+  <!-- Таймер -->
+  <section class="screen" data-name="timer">
+    <div class="timer-meta">
+      <div><span class="letter" id="timerLetter">К</span> · <span id="timerPos">существительные</span></div>
+      <div id="timerMicState"></div>
+    </div>
+
+    <div class="timer-stage">
+      <div class="timer-digits" id="timerDigits">60</div>
+      <div class="timer-voice" id="timerVoice">
+        <div class="last-word" id="lastWord"></div>
+        <div class="count" id="liveCount"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-block" id="stopBtn">Стоп</button>
+  </section>
+
+  <!-- Подсчёт -->
+  <section class="screen" data-name="count">
+    <div class="count-head">
+      <h2>Время вышло</h2>
+      <div id="countSubhead">Сколько слов вы назвали?</div>
+    </div>
+
+    <div class="num-input-wrap">
+      <button class="num-btn" id="decBtn" aria-label="Меньше">−</button>
+      <input class="num-input" id="numInput" type="number" inputmode="numeric" min="0" value="0" />
+      <button class="num-btn" id="incBtn" aria-label="Больше">+</button>
+    </div>
+
+    <div id="wordsBlock" style="display:none">
+      <div class="word-list-title">Услышано · нажмите, чтобы снять</div>
+      <div class="word-list-sub" id="wordListSub"></div>
+      <div class="word-list" id="wordList"></div>
+      <div class="rejected-block" id="rejectedBlock" style="display:none">
+        <div class="word-list-title">Не подошло по части речи</div>
+        <div class="word-list-sub">Авто-фильтр по окончаниям может ошибаться. Если слово на самом деле подходит — верните его тапом.</div>
+        <div class="word-list" id="rejectedList"></div>
+      </div>
+    </div>
+
+    <div class="grow"></div>
+
+    <button class="btn btn-primary btn-block" id="submitBtn">Засчитать</button>
+  </section>
+
+  <!-- Результат -->
+  <section class="screen" data-name="result">
+    <div class="result-stage">
+      <div class="result-count" id="resultCount">0</div>
+      <div class="result-tier" id="resultTier">Разогрев</div>
+      <div class="result-subtitle" id="resultSubtitle"></div>
+      <div class="result-meta" id="resultMeta"></div>
+      <div class="result-support" id="resultSupport"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="homeBtn">На главную</button>
+      <button class="btn btn-primary" id="againBtn">Ещё раз</button>
+    </div>
+  </section>
+
+  <!-- Модал настроек -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-card">
+      <h3>Настройки</h3>
+
+      <div class="setting-row">
+        <div class="label">Длительность</div>
+        <div class="seg" id="durationSeg">
+          <button data-d="30">30</button>
+          <button data-d="60">60</button>
+          <button data-d="90">90</button>
+          <button data-d="120">120</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="label">Звук в конце</div>
+        <div class="switch" id="soundSwitch" role="switch" tabindex="0" aria-label="Звук"></div>
+      </div>
+
+      <div style="margin-top: 18px">
+        <button class="btn btn-block" id="closeSettingsBtn">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ============================================================
+// Константы
+// ============================================================
+
+const LETTERS = ['А','Б','В','Г','Д','Е','Ж','З','И','К','Л','М','Н','О','П','Р','С','Т','У','Ф','Х','Ц','Ч','Ш','Щ','Э','Ю','Я'];
+
+const PARTS_OF_SPEECH = [
+  { id: 'noun',      label: 'Существительные', hint: 'кто? что?' },
+  { id: 'adjective', label: 'Прилагательные',  hint: 'какой? какая?' },
+  { id: 'verb',      label: 'Глаголы',         hint: 'что делать?' },
+  { id: 'mixed',     label: 'Смешанный',       hint: 'любая часть речи' },
+];
+
+const POS_LABEL_LOWER = {
+  noun: 'существительные',
+  adjective: 'прилагательные',
+  verb: 'глаголы',
+  mixed: 'смешанный',
+};
+
+// Подсказки на главной — что именно делать после выбора
+const POS_CONTEXT = {
+  noun:      'Сейчас выпадет случайная буква. За {sec} назови как можно больше <strong>существительных</strong> на эту букву. Можно в любом падеже (стол / стола / столу) — это дополнительная нагрузка для мозга.',
+  adjective: 'Сейчас выпадет случайная буква. За {sec} назови как можно больше <strong>прилагательных</strong> на эту букву. Любой род и падеж (красивый / красивая / красивого).',
+  verb:      'Сейчас выпадет случайная буква. За {sec} назови как можно больше <strong>глаголов</strong> на эту букву. Любые формы — инфинитив, спряжения, времена (бежать / бегу / бежал).',
+  mixed:     'Сейчас выпадет случайная буква. За {sec} назови как можно больше <strong>любых слов</strong> на эту букву. Часть речи не важна — лишь бы по-русски.',
+};
+
+// Подсказки в винительном — для экрана жеребьёвки
+const POS_ACCUSATIVE = {
+  noun: 'существительные',
+  adjective: 'прилагательные',
+  verb: 'глаголы',
+  mixed: 'любые слова',
+};
+
+const KEYS = {
+  history:    'speech-trainer:history',
+  lastLetters:'speech-trainer:last-letters',
+  settings:   'speech-trainer:settings',
+  micPerm:    'speech-trainer:mic-permission',
+  posChoice:  'speech-trainer:pos',
+};
+
+// ============================================================
+// Чистые функции (тестируемые)
+// ============================================================
+
+function pickLetter(last) {
+  const blocked = new Set((last || []).map(normalizeLetter));
+  const pool = LETTERS.filter(l => !blocked.has(l));
+  const arr = pool.length ? pool : LETTERS;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function normalizeLetter(l) {
+  if (!l) return l;
+  const c = l.toUpperCase();
+  return c === 'Ё' ? 'Е' : c;
+}
+
+function extractMatchingWords(transcript, letter) {
+  if (!transcript || !letter) return [];
+  const norm = (s) => String(s).toLowerCase().replace(/ё/g, 'е');
+  const target = norm(letter);
+  const tokens = norm(transcript).split(/[^а-я]+/).filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (const w of tokens) {
+    if (w.length < 2) continue;
+    if (w[0] !== target) continue;
+    if (seen.has(w)) continue;
+    seen.add(w);
+    out.push(w);
+  }
+  return out;
+}
+
+function gradeResult(count) {
+  const n = Number(count) || 0;
+  if (n >= 30) return {
+    tier: 'master', title: 'Мастер', subtitle: 'Гордость Эминема',
+    support: 'Ты в отличной форме. Перед выходом на сцену достаточно одной такой попытки для разогрева — речевой аппарат уже готов.',
+  };
+  if (n >= 20) return {
+    tier: 'normal', title: 'Норм', subtitle: 'Красава!',
+    support: 'Богатый словарный запас. И помни: на сцене стресс крадёт слова даже у профи — это нормально, продолжай тренироваться.',
+  };
+  if (n >= 10) return {
+    tier: 'beginner', title: 'Начальный', subtitle: 'Гордость Паши Техника',
+    support: 'Хороший уровень — этого хватает для повседневной речи. Ещё несколько попыток, и слова польются легче.',
+  };
+  return {
+    tier: 'warmup', title: 'Разогрев', subtitle: 'Ещё разок — язык только просыпается',
+    support: 'Не сдавайся, всё получится. В стрессе мозг тормозит — это нормально, мы все забываем слова. Продолжай тренироваться, и беглость придёт.',
+  };
+}
+
+// Эвристика части речи по окончаниям. Грубая, но рабочая для большинства слов.
+// Возвращает true если слово ПОХОЖЕ на заявленную часть речи или выбран mixed.
+// 3л настоящего (-ет/-ит) перекрывает много существительных (свет, кит, билет),
+// но без него теряются «делает», «пишет», «говорит» — самые частые формы в речи.
+// Принимаем компромисс: глаголы в verb-режиме ловим хорошо, существительные
+// типа «свет» при случайном произнесении в verb-режиме засчитаются — пользователь
+// видит их в matched и может снять.
+const VERB_ENDINGS = /(?:ться|тся|ть|ти|чь)$|(?:ел|ела|ело|ели|ал|ала|ало|али|ил|ила|ило|или|ул|ула|уло|ули|ыл|ыла|ыло|ыли|ёл)$|(?:ешь|ёшь|ишь|ете|ёте|ите|ют|ут|ат|ят|ет|ит|ёт)$|(?:вши|вший|вшая|вшее|вшие|вшую|вшего|вшему|вшим|вшими|вших|ющий|ящий|ущий)$/;
+const ADJ_ENDINGS = /(?:ый|ий|ой|ая|яя|ое|ее|ые|ие|ого|его|ому|ему|ыми|ими|ых|их|ую|юю)$/;
+
+function looksLikePOS(pos, word) {
+  if (pos === 'mixed' || !pos) return true;
+  const w = String(word).toLowerCase();
+  if (w.length < 2) return false;
+
+  if (pos === 'verb')      return VERB_ENDINGS.test(w);
+  if (pos === 'adjective') return ADJ_ENDINGS.test(w) && !VERB_ENDINGS.test(w);
+  if (pos === 'noun') {
+    // Существительное — отбраковываем явные глаголы и явные прилагательные.
+    // Окончания -ом, -ам, -ах, -ы, -и, -а, -я, -е и т.д. не дают надёжной отбраковки —
+    // у них сильное пересечение с другими классами, поэтому просто пропускаем.
+    if (/(?:ться|тся)$/.test(w)) return false;          // явный возвратный глагол
+    if (/(?:ть|ти|чь)$/.test(w) && w.length >= 3) return false; // инфинитив
+    if (/(?:ый|ий|ое|ее|ая|яя|ые|ие|ого|его|ому|ему|ыми|ими)$/.test(w)) return false; // явное прил.
+    return true;
+  }
+  return true;
+}
+
+// Таймер на абсолютном времени: rAF для UI, setTimeout для гарантии onDone в фоне
+function createTimer(durationMs, onTick, onDone) {
+  let startTs = 0;
+  let rafId = 0;
+  let toId = 0;
+  let stopped = true;
+  let finished = false;
+
+  function loop() {
+    if (stopped) return;
+    const elapsed = Date.now() - startTs;
+    const remaining = Math.max(0, durationMs - elapsed);
+    onTick && onTick(remaining);
+    if (remaining <= 0) {
+      finish();
+      return;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  function finish() {
+    if (finished) return;
+    finished = true;
+    stopped = true;
+    cancelAnimationFrame(rafId);
+    clearTimeout(toId);
+    onDone && onDone();
+  }
+
+  return {
+    start() {
+      startTs = Date.now();
+      stopped = false;
+      finished = false;
+      // setTimeout-страховка: rAF замораживается в фоне, эта подстилает
+      toId = setTimeout(finish, durationMs + 50);
+      loop();
+    },
+    stop() {
+      if (finished) return;
+      stopped = true;
+      cancelAnimationFrame(rafId);
+      clearTimeout(toId);
+      // ручной стоп — onDone не вызываем, вызывающий сам решает что делать
+    },
+    getRemaining() {
+      if (stopped) return 0;
+      return Math.max(0, durationMs - (Date.now() - startTs));
+    },
+  };
+}
+
+// Самопроверка чистых функций (видна в консоли)
+(function selftest() {
+  try {
+    console.assert(extractMatchingWords('кот, корова, конь, кот', 'К').join(',') === 'кот,корова,конь', 'extract dedup');
+    console.assert(extractMatchingWords('ёлка енот', 'Е').join(',') === 'елка,енот', 'extract ё→е');
+    console.assert(extractMatchingWords('а собака', 'А').length === 0, 'extract min length');
+    console.assert(extractMatchingWords('Корова и Кот!', 'к').join(',') === 'корова,кот', 'extract case');
+    console.assert(gradeResult(0).tier === 'warmup');
+    console.assert(gradeResult(9).tier === 'warmup');
+    console.assert(gradeResult(10).tier === 'beginner');
+    console.assert(gradeResult(19).tier === 'beginner');
+    console.assert(gradeResult(20).tier === 'normal');
+    console.assert(gradeResult(29).tier === 'normal');
+    console.assert(gradeResult(30).tier === 'master');
+    for (let i = 0; i < 30; i++) {
+      const l = pickLetter(['Й','Ы','Ь','Ъ']);
+      console.assert(LETTERS.includes(l), 'pickLetter in alphabet');
+    }
+    // эвристика части речи
+    console.assert(looksLikePOS('verb',      'бежать'),    'verb инфинитив');
+    console.assert(looksLikePOS('verb',      'умываться'), 'verb возвратный');
+    console.assert(looksLikePOS('verb',      'играл'),     'verb прош');
+    console.assert(looksLikePOS('verb',      'делает'),    'verb 3л');
+    console.assert(!looksLikePOS('verb',     'кот'),       'verb отверг сущ');
+    console.assert(looksLikePOS('adjective', 'красивый'),  'adj м');
+    console.assert(looksLikePOS('adjective', 'красивая'),  'adj ж');
+    console.assert(looksLikePOS('adjective', 'красивого'), 'adj род');
+    console.assert(!looksLikePOS('adjective','стол'),      'adj отверг сущ');
+    console.assert(looksLikePOS('noun',      'стол'),      'noun');
+    console.assert(looksLikePOS('noun',      'кошка'),     'noun ж');
+    console.assert(!looksLikePOS('noun',     'красивый'),  'noun отверг прил');
+    console.assert(!looksLikePOS('noun',     'бежать'),    'noun отверг инф');
+    console.assert(looksLikePOS('mixed',     'что_угодно'),'mixed всегда true');
+    console.assert(gradeResult(0).support && gradeResult(0).support.length > 20, 'support text');
+    console.log('%c✓ selftest passed', 'color:#10b981');
+  } catch (e) {
+    console.error('selftest failed', e);
+  }
+})();
+
+// ============================================================
+// Хранилище
+// ============================================================
+
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch { return fallback; }
+}
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function getSettings() {
+  return Object.assign({ duration: 60, soundOn: true }, loadJSON(KEYS.settings, {}));
+}
+function setSettings(patch) {
+  const next = Object.assign(getSettings(), patch);
+  saveJSON(KEYS.settings, next);
+  return next;
+}
+
+function getLastLetters() { return loadJSON(KEYS.lastLetters, []); }
+function pushLastLetter(letter) {
+  const arr = getLastLetters();
+  arr.push(letter);
+  while (arr.length > 3) arr.shift();
+  saveJSON(KEYS.lastLetters, arr);
+}
+
+function getHistory() { return loadJSON(KEYS.history, []); }
+function saveAttempt(attempt) {
+  const arr = getHistory();
+  arr.unshift(attempt);
+  if (arr.length > 50) arr.length = 50;
+  saveJSON(KEYS.history, arr);
+}
+
+function getPosChoice() {
+  const id = localStorage.getItem(KEYS.posChoice);
+  return PARTS_OF_SPEECH.find(p => p.id === id) ? id : 'noun';
+}
+function setPosChoice(id) {
+  try { localStorage.setItem(KEYS.posChoice, id); } catch {}
+}
+
+// ============================================================
+// Состояние сессии
+// ============================================================
+
+const state = {
+  pos: getPosChoice(),
+  letter: null,
+  rerollUsed: false,
+  duration: getSettings().duration,           // секунды
+  soundOn: getSettings().soundOn,
+  voiceMode: false,                           // активен ли голосовой режим в этой попытке
+  micPermission: localStorage.getItem(KEYS.micPerm) || 'unknown', // granted | denied | unknown
+  matchedWords: [],                           // подходят по эвристике части речи
+  rejectedWords: [],                          // не подошли по эвристике (лежат отдельно, можно вернуть)
+  excludedWords: new Set(),                   // снятые на экране подсчёта (из matched)
+  reincludedWords: new Set(),                 // возвращённые из rejected
+  manualCount: 0,
+  countAuto: null,
+  timer: null,
+  recognizer: null,
+};
+
+// ============================================================
+// Навигация
+// ============================================================
+
+function goto(screen) {
+  document.body.dataset.screen = screen;
+  // снять класс предупреждения таймера при уходе с экрана таймера
+  if (screen !== 'timer') document.body.classList.remove('timer-warn');
+  window.scrollTo(0, 0);
+}
+
+// ============================================================
+// Утилиты UI
+// ============================================================
+
+function el(id) { return document.getElementById(id); }
+
+let toastTimer = 0;
+function toast(msg, ms = 2200) {
+  const t = el('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function formatRelativeDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+// ============================================================
+// Главный экран
+// ============================================================
+
+function renderPosList() {
+  const list = el('posList');
+  list.innerHTML = '';
+  for (const p of PARTS_OF_SPEECH) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'pos-item' + (p.id === state.pos ? ' active' : '');
+    item.dataset.id = p.id;
+    item.innerHTML = `
+      <div>
+        <div class="label"></div>
+        <div class="hint"></div>
+      </div>
+      <span class="check"></span>
+    `;
+    item.querySelector('.label').textContent = p.label;
+    item.querySelector('.hint').textContent = p.hint;
+    item.addEventListener('click', () => {
+      state.pos = p.id;
+      setPosChoice(p.id);
+      renderPosList();
+      renderPosContext();
+    });
+    list.appendChild(item);
+  }
+}
+
+function renderPosContext() {
+  const tpl = POS_CONTEXT[state.pos] || POS_CONTEXT.noun;
+  const sec = formatDurationSec(state.duration);
+  el('posContext').innerHTML = tpl.replace('{sec}', sec);
+}
+
+function renderHeroDuration() {
+  el('heroDuration').textContent = formatDurationSec(state.duration);
+}
+
+function renderHistory() {
+  const wrap = el('historyList');
+  const all = getHistory().slice(0, 5);
+  if (!all.length) {
+    wrap.innerHTML = '<div class="history-empty">Ещё пусто — пройдите первую попытку</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const a of all) {
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    const left = document.createElement('div');
+    left.innerHTML = `<strong>${a.letter}</strong> · ${POS_LABEL_LOWER[a.partOfSpeech] || a.partOfSpeech} · ${a.count}`;
+    const right = document.createElement('div');
+    right.className = 'date';
+    right.textContent = formatRelativeDate(a.ts);
+    row.appendChild(left);
+    row.appendChild(right);
+    wrap.appendChild(row);
+  }
+}
+
+el('startBtn').addEventListener('click', () => {
+  // ленивый запрос микрофона перед первой жеребьёвкой
+  ensureMicPermission().finally(() => {
+    startDraw(false);
+  });
+});
+
+el('settingsBtn').addEventListener('click', openSettings);
+
+// ============================================================
+// Жеребьёвка
+// ============================================================
+
+let drawAnimId = 0;
+
+function startDraw(keepPos /* true: после "Ещё раз" сохраняем выбор */) {
+  state.rerollUsed = false;
+  state.matchedWords = [];
+  state.rejectedWords = [];
+  state.excludedWords = new Set();
+  state.reincludedWords = new Set();
+  state.manualCount = 0;
+  state.countAuto = null;
+
+  const posDef = PARTS_OF_SPEECH.find(p => p.id === state.pos) || PARTS_OF_SPEECH[0];
+  el('drawPos').textContent = posDef.label;
+  el('drawHint').textContent = posDef.hint;
+  el('rerollBtn').disabled = false;
+
+  goto('draw');
+  spinLetter(() => {
+    state.letter = el('letterBig').textContent;
+    updateDrawContext();
+  });
+}
+
+function updateDrawContext() {
+  const posLabel = POS_ACCUSATIVE[state.pos] || POS_LABEL_LOWER[state.pos] || '';
+  const sec = formatDurationSec(state.duration);
+  el('drawContext').innerHTML =
+    `<strong>Буква выбрана.</strong> Жми «Поехали» — за <strong>${sec}</strong> называй <strong>${posLabel}</strong> на букву <strong>${state.letter}</strong>.` +
+    (state.pos === 'mixed'
+      ? ' Часть речи не важна.'
+      : ' Любые формы и падежи засчитываются.');
+}
+
+function formatDurationSec(s) {
+  // 30 / 60 / 90 / 120 — на русском с правильным числовым словом
+  const n = Number(s) || 60;
+  const last = n % 10, last2 = n % 100;
+  let word = 'секунд';
+  if (last2 < 11 || last2 > 14) {
+    if (last === 1) word = 'секунду';
+    else if (last >= 2 && last <= 4) word = 'секунды';
+  }
+  return `${n} ${word}`;
+}
+
+function spinLetter(onSettled) {
+  const big = el('letterBig');
+  big.classList.add('spinning');
+  cancelAnimationFrame(drawAnimId);
+
+  const target = pickLetter(getLastLetters());
+  const total = 900 + Math.floor(Math.random() * 200); // 0.9-1.1s
+  const startTs = Date.now();
+
+  function step() {
+    const t = (Date.now() - startTs) / total;
+    if (t >= 1) {
+      big.textContent = target;
+      big.classList.remove('spinning');
+      pushLastLetter(target);
+      onSettled && onSettled();
+      return;
+    }
+    // частота кадров перебора: быстро в начале, медленно к концу
+    const freq = 30 + 200 * t * t;       // ms между сменами
+    const phase = Math.floor((Date.now() - startTs) / freq);
+    const idx = (phase * 7 + 3) % LETTERS.length; // псевдоразброс
+    big.textContent = LETTERS[idx];
+    drawAnimId = requestAnimationFrame(step);
+  }
+  step();
+}
+
+el('rerollBtn').addEventListener('click', () => {
+  if (state.rerollUsed) return;
+  state.rerollUsed = true;
+  el('rerollBtn').disabled = true;
+  spinLetter(() => {
+    state.letter = el('letterBig').textContent;
+  });
+});
+
+let goLock = false;
+el('goBtn').addEventListener('click', () => {
+  if (goLock) return;
+  goLock = true;
+  setTimeout(() => goLock = false, 600);
+  startTimerScreen();
+});
+
+// ============================================================
+// Голос
+// ============================================================
+
+function getSR() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+async function ensureMicPermission() {
+  // Если кеш = denied — не дёргаем браузер.
+  if (state.micPermission === 'denied') return false;
+  if (state.micPermission === 'granted') return true;
+
+  // Permissions API — лучший путь без побочных эффектов
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const res = await navigator.permissions.query({ name: 'microphone' });
+      if (res.state === 'granted') {
+        state.micPermission = 'granted';
+        localStorage.setItem(KEYS.micPerm, 'granted');
+        return true;
+      }
+      if (res.state === 'denied') {
+        state.micPermission = 'denied';
+        localStorage.setItem(KEYS.micPerm, 'denied');
+        return false;
+      }
+    }
+  } catch {}
+
+  // Если SpeechRecognition нет — нет смысла запрашивать микрофон.
+  if (!getSR()) {
+    state.micPermission = 'denied';
+    return false;
+  }
+
+  // Запросим явно через getUserMedia, чтобы prompt появился по нажатию «Начать».
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop());
+      state.micPermission = 'granted';
+      localStorage.setItem(KEYS.micPerm, 'granted');
+      return true;
+    }
+  } catch (err) {
+    state.micPermission = 'denied';
+    localStorage.setItem(KEYS.micPerm, 'denied');
+    return false;
+  }
+  return false;
+}
+
+function createRecognizer(letter, onUpdate, onError) {
+  const SR = getSR();
+  if (!SR) return null;
+  let rec;
+  try { rec = new SR(); } catch { return null; }
+  rec.lang = 'ru-RU';
+  rec.continuous = true;
+  rec.interimResults = true;
+
+  let finalText = '';
+  let interimText = '';
+  let lastEmitted = [];
+
+  rec.onresult = (e) => {
+    interimText = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const t = r[0] && r[0].transcript || '';
+      if (r.isFinal) finalText += ' ' + t;
+      else interimText += ' ' + t;
+    }
+    const combined = finalText + ' ' + interimText;
+    const words = extractMatchingWords(combined, letter);
+    // эмитим только если набор реально изменился
+    if (words.length !== lastEmitted.length || words.some((w, i) => w !== lastEmitted[i])) {
+      lastEmitted = words;
+      onUpdate(words);
+    }
+  };
+
+  rec.onerror = (e) => {
+    onError && onError(e);
+  };
+
+  // авто-рестарт если браузер сам остановился до конца таймера
+  let manualStop = false;
+  rec.onend = () => {
+    if (!manualStop) {
+      try { rec.start(); } catch {}
+    }
+  };
+
+  return {
+    start() {
+      try { rec.start(); return true; }
+      catch (e) { onError && onError(e); return false; }
+    },
+    stop() {
+      manualStop = true;
+      try { rec.stop(); } catch {}
+    },
+  };
+}
+
+// ============================================================
+// Экран таймера
+// ============================================================
+
+function startTimerScreen() {
+  const posDef = PARTS_OF_SPEECH.find(p => p.id === state.pos);
+  el('timerLetter').textContent = state.letter;
+  el('timerPos').textContent = POS_LABEL_LOWER[state.pos] || (posDef && posDef.label) || '';
+  el('lastWord').textContent = '';
+  el('liveCount').textContent = '';
+  document.body.classList.remove('timer-warn');
+
+  const durationSec = state.duration;
+  el('timerDigits').textContent = String(durationSec);
+
+  goto('timer');
+
+  // голосовой режим — только если есть разрешение и SR
+  state.voiceMode = false;
+  state.matchedWords = [];
+  state.excludedWords = new Set();
+
+  if (state.micPermission === 'granted' && getSR()) {
+    state.recognizer = createRecognizer(
+      state.letter,
+      (words) => {
+        // делим на matched/rejected по эвристике части речи
+        const matched = [];
+        const rejected = [];
+        for (const w of words) {
+          if (looksLikePOS(state.pos, w)) matched.push(w);
+          else rejected.push(w);
+        }
+        state.matchedWords = matched;
+        state.rejectedWords = rejected;
+        state.voiceMode = true;
+
+        const last = words[words.length - 1];
+        if (last) {
+          const lw = el('lastWord');
+          const ok = looksLikePOS(state.pos, last);
+          lw.textContent = (ok ? '🎙 ' : '⚠️ ') + last;
+          lw.style.opacity = '1';
+          lw.style.color = ok ? '' : 'var(--text-dim)';
+          clearTimeout(lw._fadeId);
+          lw._fadeId = setTimeout(() => { lw.style.opacity = '0.5'; }, 800);
+        }
+        el('liveCount').innerHTML = `Слов: <strong>${matched.length}</strong>` +
+          (rejected.length ? ` <span style="color:var(--text-dim)">· ${rejected.length} отбраковано</span>` : '');
+      },
+      (err) => {
+        console.warn('SR error', err && err.error);
+        if (err && (err.error === 'not-allowed' || err.error === 'service-not-allowed')) {
+          state.micPermission = 'denied';
+          localStorage.setItem(KEYS.micPerm, 'denied');
+          state.voiceMode = false;
+          toast('Микрофон недоступен — переключаюсь на ручной ввод');
+        } else if (err && err.error === 'no-speech') {
+          // тишина — игнорируем
+        } else if (err && err.error === 'audio-capture') {
+          state.voiceMode = false;
+          toast('Микрофон занят — переключаюсь на ручной ввод');
+        }
+      }
+    );
+
+    if (state.recognizer) {
+      const ok = state.recognizer.start();
+      if (ok) {
+        state.voiceMode = true;
+        el('timerMicState').textContent = '🎙';
+        el('liveCount').innerHTML = 'Слов: <strong>0</strong>';
+      } else {
+        state.recognizer = null;
+      }
+    }
+  } else {
+    el('timerMicState').textContent = '';
+  }
+
+  // Старт таймера
+  state.timer = createTimer(
+    durationSec * 1000,
+    (remainingMs) => {
+      const sec = Math.ceil(remainingMs / 1000);
+      el('timerDigits').textContent = String(sec);
+      if (remainingMs <= 10000 && remainingMs > 0) {
+        document.body.classList.add('timer-warn');
+      } else {
+        document.body.classList.remove('timer-warn');
+      }
+    },
+    () => finishAttempt(false)
+  );
+  state.timer.start();
+}
+
+el('stopBtn').addEventListener('click', () => finishAttempt(true));
+
+function finishAttempt(viaStop) {
+  if (state.timer) state.timer.stop();
+  if (state.recognizer) state.recognizer.stop();
+
+  document.body.classList.remove('timer-warn');
+
+  // фидбэк по концу таймера (не по ручному «Стоп», чтобы не громыхало)
+  if (!viaStop) {
+    if (state.soundOn) playEndBeep();
+    if (navigator.vibrate) {
+      try { navigator.vibrate(200); } catch {}
+    }
+  }
+
+  showCountScreen();
+}
+
+function playEndBeep() {
+  try {
+    const ACtx = window.AudioContext || window.webkitAudioContext;
+    if (!ACtx) return;
+    const ctx = new ACtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain).connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    osc.start(t);
+    osc.stop(t + 0.4);
+    setTimeout(() => { try { ctx.close(); } catch {} }, 600);
+  } catch {}
+}
+
+// ============================================================
+// Экран подсчёта
+// ============================================================
+
+function showCountScreen() {
+  const total = state.matchedWords.length + state.rejectedWords.length;
+  const isVoice = state.voiceMode && total > 0;
+  el('countSubhead').textContent = isVoice
+    ? 'Распознано — снимите лишнее, верните отбракованное'
+    : 'Сколько слов вы назвали?';
+
+  el('wordsBlock').style.display = isVoice ? '' : 'none';
+  el('wordListSub').textContent = state.pos === 'mixed'
+    ? 'В режиме «смешанный» учитываются любые слова.'
+    : 'Засчитываются слова, похожие на ' + (POS_ACCUSATIVE[state.pos] || '') + '. Авто-фильтр по окончаниям, может ошибаться.';
+
+  if (isVoice) {
+    state.countAuto = state.matchedWords.length;
+    renderWordList();
+    renderRejectedList();
+    syncCountFromWords();
+  } else {
+    state.countAuto = null;
+    state.manualCount = 0;
+    el('numInput').value = '0';
+  }
+  goto('count');
+}
+
+function renderWordList() {
+  const wrap = el('wordList');
+  wrap.innerHTML = '';
+  if (!state.matchedWords.length) {
+    wrap.innerHTML = '<div class="word-list-empty">Ничего не подошло — посмотрите ниже отбракованное</div>';
+    return;
+  }
+  for (const w of state.matchedWords) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    const checked = !state.excludedWords.has(w);
+    row.className = 'word-item' + (checked ? ' checked' : '');
+    row.innerHTML = `<span class="check"></span><span class="word"></span>`;
+    row.querySelector('.word').textContent = w;
+    row.addEventListener('click', () => {
+      if (state.excludedWords.has(w)) state.excludedWords.delete(w);
+      else state.excludedWords.add(w);
+      renderWordList();
+      syncCountFromWords();
+    });
+    wrap.appendChild(row);
+  }
+}
+
+function renderRejectedList() {
+  const block = el('rejectedBlock');
+  const wrap = el('rejectedList');
+  if (!state.rejectedWords.length || state.pos === 'mixed') {
+    block.style.display = 'none';
+    return;
+  }
+  block.style.display = '';
+  wrap.innerHTML = '';
+  for (const w of state.rejectedWords) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    const checked = state.reincludedWords.has(w);
+    row.className = 'word-item rejected' + (checked ? ' checked' : '');
+    row.innerHTML = `<span class="check"></span><span class="word"></span>`;
+    row.querySelector('.word').textContent = w;
+    row.addEventListener('click', () => {
+      if (state.reincludedWords.has(w)) state.reincludedWords.delete(w);
+      else state.reincludedWords.add(w);
+      renderRejectedList();
+      syncCountFromWords();
+    });
+    wrap.appendChild(row);
+  }
+}
+
+function syncCountFromWords() {
+  const fromMatched  = state.matchedWords.filter(w => !state.excludedWords.has(w)).length;
+  const fromRejected = state.rejectedWords.filter(w => state.reincludedWords.has(w)).length;
+  const n = fromMatched + fromRejected;
+  state.manualCount = n;
+  el('numInput').value = String(n);
+}
+
+function getFinalWords() {
+  const out = [];
+  for (const w of state.matchedWords)  if (!state.excludedWords.has(w))  out.push(w);
+  for (const w of state.rejectedWords) if (state.reincludedWords.has(w)) out.push(w);
+  return out;
+}
+
+el('decBtn').addEventListener('click', () => {
+  state.manualCount = Math.max(0, state.manualCount - 1);
+  el('numInput').value = String(state.manualCount);
+});
+el('incBtn').addEventListener('click', () => {
+  state.manualCount = state.manualCount + 1;
+  el('numInput').value = String(state.manualCount);
+});
+el('numInput').addEventListener('input', (e) => {
+  const v = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+  state.manualCount = v;
+});
+
+el('submitBtn').addEventListener('click', () => {
+  const finalCount = Math.max(0, parseInt(el('numInput').value || '0', 10) || 0);
+  const grade = gradeResult(finalCount);
+  const attempt = {
+    id: (crypto.randomUUID && crypto.randomUUID()) || ('a_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
+    ts: Date.now(),
+    letter: state.letter,
+    partOfSpeech: state.pos,
+    duration: state.duration,
+    count: finalCount,
+    countAuto: state.countAuto,
+    words: getFinalWords(),
+    tier: grade.tier,
+  };
+  saveAttempt(attempt);
+  showResult(attempt, grade);
+});
+
+// ============================================================
+// Экран результата
+// ============================================================
+
+function showResult(attempt, grade) {
+  el('resultCount').textContent = String(attempt.count);
+  const tierEl = el('resultTier');
+  tierEl.textContent = grade.title;
+  tierEl.className = 'result-tier tier-' + grade.tier;
+  el('resultSubtitle').textContent = grade.subtitle;
+  el('resultMeta').textContent =
+    `Буква ${attempt.letter} · ${POS_LABEL_LOWER[attempt.partOfSpeech] || attempt.partOfSpeech}`;
+  el('resultSupport').textContent = grade.support || '';
+  goto('result');
+  renderHistory();
+}
+
+el('homeBtn').addEventListener('click', () => goto('home'));
+el('againBtn').addEventListener('click', () => startDraw(true));
+
+// ============================================================
+// Настройки
+// ============================================================
+
+function openSettings() {
+  syncSettingsUI();
+  el('settingsModal').classList.add('show');
+}
+function closeSettings() {
+  el('settingsModal').classList.remove('show');
+}
+function syncSettingsUI() {
+  const s = getSettings();
+  state.duration = s.duration;
+  state.soundOn = s.soundOn;
+  for (const btn of el('durationSeg').querySelectorAll('button')) {
+    btn.classList.toggle('active', Number(btn.dataset.d) === s.duration);
+  }
+  el('soundSwitch').classList.toggle('on', !!s.soundOn);
+  el('soundSwitch').setAttribute('aria-checked', s.soundOn ? 'true' : 'false');
+}
+
+el('durationSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-d]');
+  if (!btn) return;
+  const d = Number(btn.dataset.d);
+  setSettings({ duration: d });
+  state.duration = d;
+  syncSettingsUI();
+  renderHeroDuration();
+  renderPosContext();
+});
+
+function toggleSound() {
+  const next = !getSettings().soundOn;
+  setSettings({ soundOn: next });
+  state.soundOn = next;
+  syncSettingsUI();
+}
+el('soundSwitch').addEventListener('click', toggleSound);
+el('soundSwitch').addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleSound(); }
+});
+
+el('closeSettingsBtn').addEventListener('click', closeSettings);
+el('settingsModal').addEventListener('click', (e) => {
+  if (e.target === el('settingsModal')) closeSettings();
+});
+
+// ============================================================
+// Init
+// ============================================================
+
+renderPosList();
+renderPosContext();
+renderHeroDuration();
+renderHistory();
+syncSettingsUI();
+
+// Если microphone уже granted (повторный визит) — не дёргаем prompt при загрузке.
+// Запрос делается лениво по «Начать».
+</script>
+</body>
+</html>
