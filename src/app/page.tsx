@@ -8,7 +8,7 @@ import {
 import { pickLetter } from '@/lib/letters';
 import { looksLikePOS } from '@/lib/words';
 import { gradeResult } from '@/lib/grade';
-import { checkInDictionary, fetchVocabularyForLetter } from '@/lib/dict';
+import { checkInDictionary, fetchVocabularyForLetter, type VocabWord } from '@/lib/dict';
 import { createLiveValidator, type LiveValidator } from '@/lib/liveValidator';
 import {
   getSettings, setSettings as saveSettingsToStorage,
@@ -63,7 +63,7 @@ export default function App() {
 
   // ----- Результат -----
   const [resultAttempt, setResultAttempt] = useState<Attempt | null>(null);
-  const [vocabWords, setVocabWords] = useState<string[] | null>(null);
+  const [vocabWords, setVocabWords] = useState<VocabWord[] | null>(null);
   const [vocabStatus, setVocabStatus] = useState<'loading' | 'ok' | 'empty' | 'error'>('loading');
 
   // ----- Modals/toast -----
@@ -764,12 +764,14 @@ function CountScreen(props: {
 // ============================================
 function ResultScreen({ attempt, vocabWords, vocabStatus, onHome, onAgain }: {
   attempt: Attempt;
-  vocabWords: string[] | null;
+  vocabWords: VocabWord[] | null;
   vocabStatus: 'loading' | 'ok' | 'empty' | 'error';
   onHome: () => void;
   onAgain: () => void;
 }) {
   const grade = gradeResult(attempt.count);
+  const [openWord, setOpenWord] = useState<string | null>(null);
+
   return (
     <section className="screen">
       <div className="result-stage">
@@ -783,25 +785,57 @@ function ResultScreen({ attempt, vocabWords, vocabStatus, onHome, onAgain }: {
       <div className="vocab-block">
         <div className="vocab-title">
           Расширь словарь — ещё 50 слов на букву {attempt.letter}
-          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)', fontWeight: 400 }}>
-            [{vocabStatus}{vocabStatus === 'ok' && vocabWords ? ` · ${vocabWords.length}` : ''}]
-          </span>
         </div>
-        <div className="vocab-sub">Слова из Викисловаря, которые могут пригодиться. Подобрано в выбранной части речи: {POS_LABEL_LOWER[attempt.partOfSpeech]}.</div>
+        <div className="vocab-sub">
+          Из словаря Ожегова. Часть речи: {POS_LABEL_LOWER[attempt.partOfSpeech]}.
+          Нажми на слово, чтобы увидеть значение.
+        </div>
         {vocabStatus === 'loading' && (
-          <div className="dict-status"><span className="spin"></span><span>Подбираю 50 слов из Викисловаря…</span></div>
+          <div className="dict-status"><span className="spin"></span><span>Подбираю 50 слов…</span></div>
         )}
         {vocabStatus === 'error' && (
-          <div className="word-list-sub">⚠ Не получилось загрузить. Откройте devtools и проверьте консоль — там будет причина.</div>
+          <div className="word-list-sub">⚠ Не получилось загрузить. Перезагрузите страницу или проверьте сеть.</div>
         )}
         {vocabStatus === 'empty' && (
-          <div className="word-list-sub">На эту букву Викисловарь не дал результатов.</div>
+          <div className="word-list-sub">На эту букву и часть речи в словаре пусто.</div>
         )}
         {vocabStatus === 'ok' && vocabWords && vocabWords.length > 0 && (
           <div className="vocab-grid">
-            {vocabWords.map(w => <span key={w} className="vocab-chip">{w}</span>)}
+            {vocabWords.map(w => {
+              const isOpen = openWord === w.word;
+              return (
+                <button
+                  key={w.word}
+                  type="button"
+                  className={'vocab-chip' + (isOpen ? ' open' : '')}
+                  onClick={() => setOpenWord(isOpen ? null : w.word)}
+                  aria-expanded={isOpen}
+                >
+                  {w.word}
+                </button>
+              );
+            })}
           </div>
         )}
+
+        {openWord && vocabWords && (() => {
+          const w = vocabWords.find(x => x.word === openWord);
+          if (!w) return null;
+          return (
+            <div className="vocab-define">
+              <div className="vocab-define-head">
+                <strong>{w.word}</strong>
+                <button type="button" className="vocab-define-close" aria-label="Закрыть" onClick={() => setOpenWord(null)}>✕</button>
+              </div>
+              <ol className="vocab-define-list">
+                {w.defs.map((d, i) => <li key={i}>{d}</li>)}
+              </ol>
+              {w.examples.length > 0 && (
+                <div className="vocab-define-example">{w.examples[0]}</div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="btn-row">
