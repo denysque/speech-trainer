@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { entriesByLetter, type OzhEntry } from '../src/lib/server/ozhegov.js';
-import { looksLikePOS } from '../src/lib/words.js';
+import { isLemmaPOS } from '../src/lib/words.js';
 import type { PartOfSpeech } from '../src/lib/constants.js';
 
 const VALID_POS: PartOfSpeech[] = ['noun', 'adjective', 'verb', 'mixed'];
@@ -36,7 +36,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   for (const e of all) {
     if (!isCleanRussianWord(e.word)) continue;
     if (!e.defs.length) continue;
-    if (pos !== 'mixed' && !looksLikePOS(pos, e.word)) continue;
+    if (pos !== 'mixed' && !isLemmaPOS(pos, e.word)) continue;
     filtered.push(e);
   }
 

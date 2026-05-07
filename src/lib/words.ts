@@ -36,3 +36,22 @@ export function looksLikePOS(pos: PartOfSpeech, word: string): boolean {
   }
   return true;
 }
+
+// Узкая проверка лемм Ожегова: для глаголов лемма = инфинитив (-ть/-ти/-чь),
+// для прилагательных = м.р. ед.ч. (-ый/-ий), всё остальное = существительное.
+// Используется только в /api/vocab — там слова уже в начальной форме, а не в живой речи.
+export function isLemmaPOS(pos: PartOfSpeech, word: string): boolean {
+  if (pos === 'mixed' || !pos) return true;
+  const w = String(word).toLowerCase();
+  if (w.length < 2) return false;
+
+  // length >= 5 отсекает короткие сущ. на «-ть/-чь»: мать, дочь, ночь, рожь, соль.
+  const isVerb = w.length >= 5 && /(?:ть|ти|чь)(?:ся)?$/.test(w);
+  // только -ый/-ий: -ой даёт слишком много false positives (герой, строй, бой).
+  const isAdjective = w.length >= 4 && /(?:ый|ий)$/.test(w) && !isVerb;
+
+  if (pos === 'verb')      return isVerb;
+  if (pos === 'adjective') return isAdjective;
+  if (pos === 'noun')      return !isVerb && !isAdjective;
+  return true;
+}
