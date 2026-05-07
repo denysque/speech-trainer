@@ -59,9 +59,18 @@ export interface Attempt {
   tier: 'warmup' | 'beginner' | 'normal' | 'master';
 }
 
+export type Theme = 'auto' | 'light' | 'dark';
+
 export interface Settings {
   duration: number;   // 30 / 60 / 90 / 120
   soundOn: boolean;
+  theme: Theme;
 }
 
-export const DEFAULT_SETTINGS: Settings = { duration: 60, soundOn: true };
+export const DEFAULT_SETTINGS: Settings = { duration: 60, soundOn: true, theme: 'auto' };
+
+export const THEME_LABEL: Record<Theme, string> = {
+  auto:  'Авто',
+  light: 'День',
+  dark:  'Ночь',
+};

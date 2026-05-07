@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   PARTS_OF_SPEECH, POS_LABEL_LOWER, POS_ACCUSATIVE, POS_CONTEXT, LETTERS,
-  type PartOfSpeech, type Attempt, type Settings, DEFAULT_SETTINGS,
+  THEME_LABEL,
+  type PartOfSpeech, type Attempt, type Settings, type Theme, DEFAULT_SETTINGS,
 } from '@/lib/constants';
 import { pickLetter } from '@/lib/letters';
 import { looksLikePOS } from '@/lib/words';
@@ -20,6 +21,38 @@ import { createRecognizer, ensureMicPermission, getSR, type Recognizer } from '@
 import { formatDurationSec, pluralWords, formatRelativeDate } from '@/lib/format';
 
 type Screen = 'home' | 'draw' | 'timer' | 'count' | 'result';
+
+function applyTheme(t: Theme) {
+  if (typeof document === 'undefined') return;
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.dataset.theme = t;
+}
+
+function ThemeIcon({ theme }: { theme: Theme }) {
+  if (theme === 'light') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 3v1.5M12 19.5V21M4.22 4.22l1.06 1.06M18.72 18.72l1.06 1.06M3 12h1.5M19.5 12H21M4.22 19.78l1.06-1.06M18.72 5.28l1.06-1.06"/>
+      </svg>
+    );
+  }
+  if (theme === 'dark') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20.5 14.2A8 8 0 0 1 9.8 3.5a8 8 0 1 0 10.7 10.7Z"/>
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" stroke="none"/>
+    </svg>
+  );
+}
+
+const THEME_CYCLE: Theme[] = ['auto', 'light', 'dark'];
 
 export default function App() {
   // ----- UI state -----
@@ -70,7 +103,9 @@ export default function App() {
 
   // -------- Init из localStorage --------
   useEffect(() => {
-    setSettingsState(getSettings());
+    const s = getSettings();
+    applyTheme(s.theme);
+    setSettingsState(s);
     setPos(getPosChoice());
     setHistory(getHistory());
   }, []);
@@ -398,7 +433,14 @@ export default function App() {
 
   const updateSettings = (patch: Partial<Settings>) => {
     const next = saveSettingsToStorage(patch);
+    if (patch.theme !== undefined) applyTheme(next.theme);
     setSettingsState(next);
+  };
+
+  const cycleTheme = () => {
+    const idx = THEME_CYCLE.indexOf(settings.theme);
+    const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+    updateSettings({ theme: next });
   };
 
   const posDef = PARTS_OF_SPEECH.find(p => p.id === pos)!;
@@ -418,7 +460,16 @@ export default function App() {
       {/* HOME */}
       {screen === 'home' && (
         <section className="screen">
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              className="icon-btn"
+              type="button"
+              aria-label={`Тема: ${THEME_LABEL[settings.theme]}. Нажмите чтобы переключить.`}
+              title={`Тема: ${THEME_LABEL[settings.theme]}`}
+              onClick={cycleTheme}
+            >
+              <ThemeIcon theme={settings.theme} />
+            </button>
             <button className="icon-btn" type="button" aria-label="Настройки" onClick={() => setShowSettings(true)}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
@@ -604,6 +655,19 @@ export default function App() {
                   className={d === settings.duration ? 'active' : ''}
                   onClick={() => updateSettings({ duration: d })}
                 >{d}</button>
+              ))}
+            </div>
+          </div>
+          <div className="setting-row">
+            <div>Тема</div>
+            <div className="seg">
+              {(['auto','light','dark'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  className={t === settings.theme ? 'active' : ''}
+                  onClick={() => updateSettings({ theme: t })}
+                >{THEME_LABEL[t]}</button>
               ))}
             </div>
           </div>
