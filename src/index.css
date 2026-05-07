@@ -11,10 +11,13 @@
   --surface:      #fffdf9;          /* чистая бумага */
   --surface-2:    #ebe4d8;          /* приглушённая бумага */
   --surface-hover:#e3dccf;
+  --surface-tint: rgba(26, 26, 26, 0.025);
   --border:       rgba(26, 26, 26, 0.08);
   --border-strong:rgba(26, 26, 26, 0.18);
   --ink:          #1a1a1a;          /* sumi-iro — чернила */
   --ink-soft:     #2c2a27;
+  --on-ink:       #fffdf9;          /* текст поверх ink (toast, .checked) */
+  --on-accent:    #fffdf9;          /* текст поверх accent */
   --text:         var(--ink);
   --text-muted:   #6b6864;
   --text-dim:     #a09a91;
@@ -26,12 +29,42 @@
   --red-soft:     rgba(168, 50, 50, 0.10);
   --shadow-sm:    0 1px 0 rgba(26, 26, 26, 0.04);
   --shadow-md:    0 1px 0 rgba(26, 26, 26, 0.05), 0 8px 22px rgba(26, 26, 26, 0.06);
+  --modal-veil:   rgba(26, 26, 26, 0.32);
   --tap:          48px;
   --radius:       3px;              /* почти прямые углы */
   --radius-pill:  999px;
 
   --font-sans:    'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-serif:   'Noto Serif JP', 'Noto Serif', 'Cormorant Garamond', Georgia, serif;
+}
+
+/* Ночная тема: глубокий тёплый sumi-фон, off-white текст,
+   киноварь чуть мягче — не режет на тёмном. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #14110d;
+    --surface:      #1c1916;
+    --surface-2:    #221e1a;
+    --surface-hover:#2a2520;
+    --surface-tint: rgba(232, 226, 214, 0.035);
+    --border:       rgba(232, 226, 214, 0.10);
+    --border-strong:rgba(232, 226, 214, 0.22);
+    --ink:          #ebe4d6;        /* off-white, тёплый */
+    --ink-soft:     #d4cdc0;
+    --on-ink:       #14110d;
+    --on-accent:    #fffdf9;
+    --text-muted:   #9b958a;
+    --text-dim:     #5d5852;
+    --accent:       #d05858;        /* shu приглушённей и теплее на тёмном */
+    --accent-2:     #de7474;
+    --green:        #7a9d83;
+    --gold:         #d4a44a;
+    --red:          #d05858;
+    --red-soft:     rgba(208, 88, 88, 0.14);
+    --shadow-sm:    0 1px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md:    0 1px 0 rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.55);
+    --modal-veil:   rgba(0, 0, 0, 0.55);
+  }
 }
 
 @theme inline {
@@ -97,7 +130,7 @@ h1, h2, h3 {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fffdf9;
+  color: var(--on-accent);
 }
 .btn-primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn-block { width: 100%; }
@@ -204,7 +237,7 @@ h1, h2, h3 {
   text-align: left;
   transition: background 0.18s ease;
 }
-.pos-item:hover { background: rgba(26, 26, 26, 0.02); }
+.pos-item:hover { background: var(--surface-tint); }
 .pos-item .label { font-weight: 500; font-size: 15px; }
 .pos-item .hint {
   color: var(--text-dim);
@@ -487,7 +520,7 @@ h1, h2, h3 {
   font-size: 14.5px;
   transition: background 0.15s ease;
 }
-.word-item:hover { background: rgba(26, 26, 26, 0.02); }
+.word-item:hover { background: var(--surface-tint); }
 .word-item .check {
   width: 14px; height: 14px;
   border-radius: 2px;
@@ -649,7 +682,7 @@ h1, h2, h3 {
 .vocab-chip.open {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fffdf9;
+  color: var(--on-accent);
 }
 .vocab-chip:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
 
@@ -752,7 +785,7 @@ h1, h2, h3 {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(26, 26, 26, 0.32);
+  background: var(--modal-veil);
   display: none;
   align-items: flex-end;
   justify-content: center;
