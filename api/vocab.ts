@@ -1,9 +1,7 @@
-import { NextResponse } from 'next/server';
-import { entriesByLetter, type OzhEntry } from '@/lib/server/ozhegov';
-import { looksLikePOS } from '@/lib/words';
-import type { PartOfSpeech } from '@/lib/constants';
-
-export const runtime = 'nodejs';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { entriesByLetter, type OzhEntry } from '../src/lib/server/ozhegov.js';
+import { looksLikePOS } from '../src/lib/words.js';
+import type { PartOfSpeech } from '../src/lib/constants.js';
 
 const VALID_POS: PartOfSpeech[] = ['noun', 'adjective', 'verb', 'mixed'];
 
@@ -16,16 +14,21 @@ function isCleanRussianWord(w: string): boolean {
   return true;
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const letter = searchParams.get('letter') || '';
-  const posRaw = searchParams.get('pos') || 'mixed';
-  const countRaw = parseInt(searchParams.get('count') || '50', 10);
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  const letter = (typeof req.query.letter === 'string' ? req.query.letter : '') || '';
+  const posRaw = (typeof req.query.pos === 'string' ? req.query.pos : 'mixed') || 'mixed';
+  const countRaw = parseInt(
+    (typeof req.query.count === 'string' ? req.query.count : '50') || '50',
+    10,
+  );
   const count = Math.max(1, Math.min(100, countRaw || 50));
-  const pos: PartOfSpeech = (VALID_POS as readonly string[]).includes(posRaw) ? (posRaw as PartOfSpeech) : 'mixed';
+  const pos: PartOfSpeech = (VALID_POS as readonly string[]).includes(posRaw)
+    ? (posRaw as PartOfSpeech)
+    : 'mixed';
 
   if (!letter) {
-    return NextResponse.json({ error: 'letter required' }, { status: 400 });
+    res.status(400).json({ error: 'letter required' });
+    return;
   }
 
   const all = entriesByLetter(letter);
@@ -38,7 +41,8 @@ export async function GET(req: Request) {
   }
 
   if (!filtered.length) {
-    return NextResponse.json({ words: [], total: 0 });
+    res.status(200).json({ words: [], total: 0 });
+    return;
   }
 
   // Случайная выборка count из filtered (Fisher–Yates на копии)
@@ -50,7 +54,7 @@ export async function GET(req: Request) {
   }
   const picked = arr.slice(arr.length - n).reverse();
 
-  return NextResponse.json({
+  res.status(200).json({
     words: picked.map(e => ({
       word: e.word,
       defs: e.defs.slice(0, 3),

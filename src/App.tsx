@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   PARTS_OF_SPEECH, POS_LABEL_LOWER, POS_ACCUSATIVE, POS_CONTEXT, LETTERS,
@@ -481,7 +479,7 @@ export default function App() {
               </svg>
               <span>by @tellychko</span>
             </a>
-            <div className="built">Собрано на Next.js / TypeScript / Tailwind</div>
+            <div className="built">Собрано на React / Vite / TypeScript</div>
           </div>
         </section>
       )}

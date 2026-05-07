@@ -1,4 +1,4 @@
-import type { PartOfSpeech } from './constants';
+import type { PartOfSpeech } from './constants.js';
 
 export function extractMatchingWords(transcript: string, letter: string): string[] {
   if (!transcript || !letter) return [];
