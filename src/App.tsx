@@ -448,6 +448,7 @@ export default function App() {
 
   return (
     <>
+      <img className="brand-mark" src="/logo-tb.png" alt="" aria-hidden="true" />
       {showResetBtn && (
         <button className="reset-btn" type="button" aria-label="Прервать и вернуться на главную" onClick={handleResetClick}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

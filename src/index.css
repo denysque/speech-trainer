@@ -1068,3 +1068,33 @@ h1, h2, h3 {
 }
 .switch.on { background: var(--accent); border-color: var(--accent); }
 .switch.on::after { transform: translateX(20px); background: var(--on-accent); }
+
+/* === Brand mark — фирменный знак в углу.
+   Лого — letterpress на крафтовой бумаге (cream-on-cream). На светлой
+   теме `mix-blend-mode: multiply` гасит кремовый фон картинки и
+   оставляет только тёмный глиф. На тёмной — инвертируем + lighten,
+   чтобы кремовое стало светлым на чёрном.
+   ========================================================== */
+.brand-mark {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  height: 30px;
+  width: auto;
+  z-index: 30;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  mix-blend-mode: multiply;
+  opacity: 0.92;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-mark {
+    mix-blend-mode: lighten;
+    filter: invert(1) brightness(0.95);
+  }
+}
+:root[data-theme="dark"] .brand-mark {
+  mix-blend-mode: lighten;
+  filter: invert(1) brightness(0.95);
+}
