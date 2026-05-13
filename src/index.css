@@ -1069,32 +1069,24 @@ h1, h2, h3 {
 .switch.on { background: var(--accent); border-color: var(--accent); }
 .switch.on::after { transform: translateX(20px); background: var(--on-accent); }
 
-/* === Brand mark — фирменный знак в углу.
-   Лого — letterpress на крафтовой бумаге (cream-on-cream). На светлой
-   теме `mix-blend-mode: multiply` гасит кремовый фон картинки и
-   оставляет только тёмный глиф. На тёмной — инвертируем + lighten,
-   чтобы кремовое стало светлым на чёрном.
+/* === Brand mark — фирменный знак, живёт в footer-блоке.
+   PNG с прозрачным фоном (вырезан из letterpress-оригинала).
+   В тёмной теме инвертируем filter'ом — тёмный глиф становится светлым.
    ========================================================== */
 .brand-mark {
-  position: fixed;
-  top: max(14px, env(safe-area-inset-top));
-  left: max(14px, env(safe-area-inset-left));
-  height: 30px;
+  display: block;
+  margin: 0 auto 14px;
+  height: 56px;
   width: auto;
-  z-index: 30;
-  pointer-events: none;
+  opacity: 0.9;
   user-select: none;
   -webkit-user-drag: none;
-  mix-blend-mode: multiply;
-  opacity: 0.92;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .brand-mark {
-    mix-blend-mode: lighten;
-    filter: invert(1) brightness(0.95);
-  }
+  :root:not([data-theme="light"]) .brand-mark { filter: invert(1) brightness(0.92); }
 }
-:root[data-theme="dark"] .brand-mark {
-  mix-blend-mode: lighten;
-  filter: invert(1) brightness(0.95);
-}
+:root[data-theme="dark"] .brand-mark { filter: invert(1) brightness(0.92); }
+
+/* Когда лого в .footer-promo — центрируем весь блок */
+.footer-promo.has-brand { text-align: center; }
+.footer-promo.has-brand a { justify-content: center; }
